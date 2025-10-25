@@ -1,0 +1,91 @@
+{
+	"id": "auth-service-environment",
+	"name": "Auth Service - Local Development",
+	"values": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "keycloak_base_url",
+			"value": "http://localhost:8090",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "keycloak_client_id",
+			"value": "auth-service",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "keycloak_client_secret",
+			"value": "your-client-secret-here",
+			"type": "secret",
+			"enabled": true
+		},
+		{
+			"key": "keycloak_realm",
+			"value": "master",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "test_username",
+			"value": "",
+			"type": "any",
+			"enabled": true
+		},
+		{
+			"key": "test_email",
+			"value": "",
+			"type": "any",
+			"enabled": true
+		},
+		{
+			"key": "created_user_id",
+			"value": "",
+			"type": "any",
+			"enabled": true
+		},
+		{
+			"key": "access_token",
+			"value": "",
+			"type": "secret",
+			"enabled": true
+		},
+		{
+			"key": "refresh_token",
+			"value": "",
+			"type": "secret",
+			"enabled": true
+		},
+		{
+			"key": "test_token",
+			"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+			"type": "secret",
+			"enabled": true
+		},
+		{
+			"key": "prometheus_url",
+			"value": "http://localhost:9090",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "grafana_url",
+			"value": "http://localhost:3000",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "jaeger_url",
+			"value": "http://localhost:16686",
+			"type": "default",
+			"enabled": true
+		}
+	],
+	"_postman_variable_scope": "environment"
+}

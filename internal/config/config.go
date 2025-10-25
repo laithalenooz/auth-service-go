@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -81,6 +82,14 @@ type MetricsConfig struct {
 
 // Load loads configuration from environment variables and config files
 func Load() (*Config, error) {
+	// Load .env file if it exists
+	if err := godotenv.Load(); err != nil {
+		// .env file is optional, so we don't fail if it doesn't exist
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("failed to load .env file: %w", err)
+		}
+	}
+
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
@@ -120,19 +129,19 @@ func Load() (*Config, error) {
 // setDefaults sets default configuration values
 func setDefaults() {
 	// Service defaults
-	viper.SetDefault("service.name", "keycloak-wrapper")
+	viper.SetDefault("service.name", "auth-service")
 	viper.SetDefault("service.version", "1.0.0")
 	viper.SetDefault("service.environment", "development")
 	viper.SetDefault("service.log_level", "info")
 
 	// Keycloak defaults
-	viper.SetDefault("keycloak.base_url", "http://localhost:8080")
+	viper.SetDefault("keycloak.base_url", "http://localhost:8090")
 	viper.SetDefault("keycloak.realm", "master")
-	viper.SetDefault("keycloak.client_id", "admin-cli")
+	viper.SetDefault("keycloak.client_id", "auth-service")
 	viper.SetDefault("keycloak.timeout", 30)
 
 	// Redis defaults
-	viper.SetDefault("redis.url", "redis://localhost:6379")
+	viper.SetDefault("redis.url", "redis://localhost:6379/0")
 	viper.SetDefault("redis.db", 0)
 	viper.SetDefault("redis.timeout", 5)
 
@@ -144,7 +153,7 @@ func setDefaults() {
 	viper.SetDefault("telemetry.enable_tracing", true)
 
 	// Server defaults
-	viper.SetDefault("server.grpc_port", 9090)
+	viper.SetDefault("server.grpc_port", 8081)
 	viper.SetDefault("server.http_port", 8080)
 
 	// Metrics defaults

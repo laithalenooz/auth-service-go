@@ -1,0 +1,625 @@
+{
+	"info": {
+		"_postman_id": "auth-service-collection",
+		"name": "Auth Service - Complete API Collection",
+		"description": "Comprehensive collection for testing the Auth Service with Keycloak integration, health checks, and monitoring endpoints.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health & Monitoring",
+			"item": [
+				{
+					"name": "Health Check (Cached)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Health Check (Detailed)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health/detailed",
+							"host": ["{{base_url}}"],
+							"path": ["health", "detailed"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Readiness Probe",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/ready",
+							"host": ["{{base_url}}"],
+							"path": ["ready"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Liveness Probe",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/live",
+							"host": ["{{base_url}}"],
+							"path": ["live"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Prometheus Metrics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/metrics",
+							"host": ["{{base_url}}"],
+							"path": ["metrics"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "User Management",
+			"item": [
+				{
+					"name": "Create User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.collectionVariables.set('created_user_id', response.id);",
+									"    pm.test('User created successfully', function () {",
+									"        pm.expect(response.id).to.not.be.empty;",
+									"        pm.expect(response.username).to.eql(pm.variables.get('test_username'));",
+									"    });",
+									"} else {",
+									"    pm.test('User creation failed', function () {",
+									"        pm.expect.fail('Expected 201 but got ' + pm.response.code);",
+									"    });",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generate unique username for testing",
+									"const timestamp = Date.now();",
+									"pm.collectionVariables.set('test_username', 'testuser_' + timestamp);",
+									"pm.collectionVariables.set('test_email', 'testuser_' + timestamp + '@example.com');"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"email\": \"{{test_email}}\",\n    \"firstName\": \"Test\",\n    \"lastName\": \"User\",\n    \"enabled\": true,\n    \"emailVerified\": false,\n    \"attributes\": {\n        \"department\": \"engineering\",\n        \"role\": \"developer\"\n    },\n    \"credentials\": [\n        {\n            \"type\": \"password\",\n            \"value\": \"TestPassword123!\",\n            \"temporary\": false\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get User by ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('User retrieved successfully', function () {",
+									"    pm.response.to.have.status(200);",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.id).to.eql(pm.collectionVariables.get('created_user_id'));",
+									"    pm.expect(response.username).to.not.be.empty;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/{{created_user_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "{{created_user_id}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('User updated successfully', function () {",
+									"    pm.response.to.have.status(200);",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.firstName).to.eql('Updated');",
+									"    pm.expect(response.lastName).to.eql('TestUser');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"firstName\": \"Updated\",\n    \"lastName\": \"TestUser\",\n    \"enabled\": true,\n    \"emailVerified\": true,\n    \"attributes\": {\n        \"department\": \"engineering\",\n        \"role\": \"senior-developer\",\n        \"updated_at\": \"{{$timestamp}}\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/{{created_user_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "{{created_user_id}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Users",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Users listed successfully', function () {",
+									"    pm.response.to.have.status(200);",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.users).to.be.an('array');",
+									"    pm.expect(response.total).to.be.a('number');",
+									"    pm.expect(response.total).to.be.at.least(1);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users?page=0&pageSize=10&search={{test_username}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								},
+								{
+									"key": "search",
+									"value": "{{test_username}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('User deleted successfully', function () {",
+									"    pm.response.to.have.status(204);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/{{created_user_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "{{created_user_id}}"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Token Operations",
+			"item": [
+				{
+					"name": "Introspect Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Token introspection completed', function () {",
+									"    pm.response.to.have.status(200);",
+									"    const response = pm.response.json();",
+									"    pm.expect(response).to.have.property('active');",
+									"    // Note: Token might be invalid, but introspection should work",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"token\": \"{{test_token}}\",\n    \"tokenTypeHint\": \"access_token\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/tokens/introspect",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "tokens", "introspect"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.test('Token refreshed successfully', function () {",
+									"        pm.expect(response.accessToken).to.not.be.empty;",
+									"        pm.expect(response.tokenType).to.eql('Bearer');",
+									"    });",
+									"    pm.collectionVariables.set('access_token', response.accessToken);",
+									"} else {",
+									"    pm.test('Token refresh failed (expected with test token)', function () {",
+									"        pm.expect(pm.response.code).to.be.oneOf([400, 401]);",
+									"    });",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refreshToken\": \"{{test_refresh_token}}\",\n    \"clientId\": \"{{keycloak_client_id}}\",\n    \"clientSecret\": \"{{keycloak_client_secret}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/tokens/refresh",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "tokens", "refresh"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Load Testing",
+			"item": [
+				{
+					"name": "Health Check - Load Test",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Health check responds quickly', function () {",
+									"    pm.expect(pm.response.responseTime).to.be.below(500);",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Users - Performance Test",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('List users responds within acceptable time', function () {",
+									"    pm.expect(pm.response.responseTime).to.be.below(2000);",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users?page=0&pageSize=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"],
+							"query": [
+								{
+									"key": "page",
+									"value": "0"
+								},
+								{
+									"key": "pageSize",
+									"value": "50"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Error Scenarios",
+			"item": [
+				{
+					"name": "Get Non-existent User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Non-existent user returns 404', function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/non-existent-user-id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "non-existent-user-id"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create User with Invalid Data",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Invalid user data returns 400', function () {",
+									"    pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"\",\n    \"email\": \"invalid-email\",\n    \"enabled\": \"not-boolean\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Introspect Invalid Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Invalid token introspection handled', function () {",
+									"    pm.response.to.have.status(200);",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.active).to.be.false;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"token\": \"invalid.jwt.token\",\n    \"tokenTypeHint\": \"access_token\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/tokens/introspect",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "tokens", "introspect"]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Set default values if not already set",
+					"if (!pm.collectionVariables.get('base_url')) {",
+					"    pm.collectionVariables.set('base_url', 'http://localhost:8080');",
+					"}",
+					"if (!pm.collectionVariables.get('test_token')) {",
+					"    pm.collectionVariables.set('test_token', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c');",
+					"}",
+					"if (!pm.collectionVariables.get('test_refresh_token')) {",
+					"    pm.collectionVariables.set('test_refresh_token', 'test-refresh-token');",
+					"}",
+					"if (!pm.collectionVariables.get('keycloak_client_id')) {",
+					"    pm.collectionVariables.set('keycloak_client_id', 'auth-service');",
+					"}",
+					"if (!pm.collectionVariables.get('keycloak_client_secret')) {",
+					"    pm.collectionVariables.set('keycloak_client_secret', 'your-client-secret');",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global test to check response time",
+					"pm.test('Response time is acceptable', function () {",
+					"    pm.expect(pm.response.responseTime).to.be.below(5000);",
+					"});",
+					"",
+					"// Log response time for monitoring",
+					"console.log('Response time: ' + pm.response.responseTime + 'ms for ' + pm.request.url);"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "test_username",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "test_email",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "created_user_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "test_token",
+			"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+			"type": "string"
+		},
+		{
+			"key": "test_refresh_token",
+			"value": "test-refresh-token",
+			"type": "string"
+		},
+		{
+			"key": "access_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "keycloak_client_id",
+			"value": "auth-service",
+			"type": "string"
+		},
+		{
+			"key": "keycloak_client_secret",
+			"value": "your-client-secret",
+			"type": "string"
+		}
+	]
+}

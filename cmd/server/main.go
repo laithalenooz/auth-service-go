@@ -19,7 +19,10 @@ import (
 	keycloakv1 "github.com/laithalenooz/auth-service-go/gen/keycloak/v1"
 	"github.com/laithalenooz/auth-service-go/internal/cache"
 	"github.com/laithalenooz/auth-service-go/internal/config"
+	"github.com/laithalenooz/auth-service-go/internal/health"
 	"github.com/laithalenooz/auth-service-go/internal/keycloak"
+	"github.com/laithalenooz/auth-service-go/internal/metrics"
+	"github.com/laithalenooz/auth-service-go/internal/middleware"
 	"github.com/laithalenooz/auth-service-go/internal/server"
 	"github.com/laithalenooz/auth-service-go/internal/telemetry"
 )
@@ -67,8 +70,19 @@ func main() {
 		log.Println("Redis connection established")
 	}
 
+	// Initialize metrics (single instance for the entire application)
+	appMetrics := metrics.NewMetrics()
+
 	// Initialize Keycloak client
-	keycloakClient := keycloak.NewClient(&cfg.Keycloak)
+	keycloakClient := keycloak.NewClient(&cfg.Keycloak, appMetrics)
+
+	// Initialize health service
+	healthService := health.NewHealthService(cfg, appMetrics)
+	healthService.RegisterChecker(health.NewRedisHealthChecker(cacheClient, appMetrics))
+	healthService.RegisterChecker(health.NewKeycloakHealthChecker(keycloakClient, appMetrics))
+
+	// Start periodic health checks
+	go healthService.StartPeriodicHealthChecks(context.Background(), 30*time.Second)
 
 	// Create gRPC server
 	grpcServer := server.NewGRPCServer(cfg, keycloakClient, cacheClient)
@@ -79,14 +93,14 @@ func main() {
 		case "grpc":
 			startGRPCServer(grpcServer, cfg.Server.GRPCPort)
 		case "http":
-			startHTTPServer(cfg, cfg.Server.HTTPPort, cfg.Server.GRPCPort)
+			startHTTPServer(cfg, cfg.Server.HTTPPort, cfg.Server.GRPCPort, healthService, appMetrics)
 		case "all":
-			startBothServers(grpcServer, cfg)
+			startBothServers(grpcServer, cfg, healthService, appMetrics)
 		default:
 			printUsage()
 		}
 	} else {
-		startBothServers(grpcServer, cfg)
+		startBothServers(grpcServer, cfg, healthService, appMetrics)
 	}
 }
 
@@ -115,11 +129,11 @@ func startGRPCServer(grpcServer *server.GRPCServer, port int) {
 	}
 }
 
-func startHTTPServer(cfg *config.Config, httpPort, grpcPort int) {
+func startHTTPServer(cfg *config.Config, httpPort, grpcPort int, healthService *health.HealthService, appMetrics *metrics.Metrics) {
 	log.Printf("Starting HTTP server on port %d (proxying to gRPC on port %d)", httpPort, grpcPort)
 	
 	// Create HTTP server with REST endpoints
-	router := createHTTPRouter(cfg, grpcPort)
+	router := createHTTPRouter(cfg, grpcPort, healthService, appMetrics)
 	
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", httpPort),
@@ -143,7 +157,7 @@ func startHTTPServer(cfg *config.Config, httpPort, grpcPort int) {
 	}
 }
 
-func startBothServers(grpcServer *server.GRPCServer, cfg *config.Config) {
+func startBothServers(grpcServer *server.GRPCServer, cfg *config.Config, healthService *health.HealthService, appMetrics *metrics.Metrics) {
 	log.Printf("Starting both gRPC server on port %d and HTTP server on port %d", cfg.Server.GRPCPort, cfg.Server.HTTPPort)
 	
 	// Start gRPC server in goroutine
@@ -162,7 +176,7 @@ func startBothServers(grpcServer *server.GRPCServer, cfg *config.Config) {
 	}()
 
 	// Start HTTP server in main goroutine
-	router := createHTTPRouter(cfg, cfg.Server.GRPCPort)
+	router := createHTTPRouter(cfg, cfg.Server.GRPCPort, healthService, appMetrics)
 	
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Server.HTTPPort),
@@ -187,24 +201,60 @@ func startBothServers(grpcServer *server.GRPCServer, cfg *config.Config) {
 	}
 }
 
-func createHTTPRouter(cfg *config.Config, grpcPort int) *gin.Engine {
-	if cfg.Service.Environment == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
+func createHTTPRouter(cfg *config.Config, grpcPort int, healthService *health.HealthService, appMetrics *metrics.Metrics) *gin.Engine {
+	// Use the shared metrics instance
+	metricsMiddleware := middleware.NewMetricsMiddleware(appMetrics)
 
 	router := gin.Default()
 
-	// Health check endpoint
+	// Add metrics middleware
+	router.Use(metricsMiddleware.HTTPMetrics())
+	router.Use(metricsMiddleware.ErrorMetrics())
+
+	// Health check endpoints
 	router.GET("/health", func(c *gin.Context) {
+		health := healthService.GetCachedHealth()
+		statusCode := 200
+		if health.Status == "unhealthy" {
+			statusCode = 503
+		} else if health.Status == "degraded" {
+			statusCode = 200 // Still return 200 for degraded but log the issue
+		}
+		c.JSON(statusCode, health)
+	})
+
+	router.GET("/health/detailed", func(c *gin.Context) {
+		health := healthService.CheckAll(c.Request.Context())
+		statusCode := 200
+		if health.Status == "unhealthy" {
+			statusCode = 503
+		} else if health.Status == "degraded" {
+			statusCode = 200
+		}
+		c.JSON(statusCode, health)
+	})
+
+	// Readiness probe (for Kubernetes)
+	router.GET("/ready", func(c *gin.Context) {
+		health := healthService.GetCachedHealth()
+		if health.Status == "unhealthy" {
+			c.JSON(503, gin.H{"status": "not ready", "message": "service dependencies are unhealthy"})
+			return
+		}
+		c.JSON(200, gin.H{"status": "ready"})
+	})
+
+	// Liveness probe (for Kubernetes)
+	router.GET("/live", func(c *gin.Context) {
 		c.JSON(200, gin.H{
-			"status":    "healthy",
+			"status":    "alive",
+			"timestamp": time.Now().UTC(),
 			"service":   cfg.Service.Name,
 			"version":   cfg.Service.Version,
-			"timestamp": time.Now().UTC(),
 		})
 	})
 
-	// Metrics endpoint
+	// Metrics endpoint for Prometheus
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// API routes that proxy to gRPC

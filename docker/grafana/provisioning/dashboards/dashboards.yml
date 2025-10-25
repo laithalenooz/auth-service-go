@@ -1,12 +1,12 @@
 apiVersion: 1
 
 providers:
-  - name: 'default'
+  - name: 'auth-service-dashboards'
     orgId: 1
-    folder: ''
+    folder: 'Auth Service'
     type: file
     disableDeletion: false
     updateIntervalSeconds: 10
     allowUiUpdates: true
     options:
-      path: /var/lib/grafana/dashboards
+      path: /etc/grafana/provisioning/dashboards

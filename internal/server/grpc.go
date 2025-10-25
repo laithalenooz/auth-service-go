@@ -99,6 +99,12 @@ func (s *GRPCServer) CreateUser(ctx context.Context, req *keycloakv1.CreateUserR
 	}
 
 	// Convert protobuf request to Keycloak user
+	// Convert attributes from map[string]string to map[string]interface{}
+	attributes := make(map[string]interface{})
+	for k, v := range req.Attributes {
+		attributes[k] = v
+	}
+
 	kcUser := &keycloak.User{
 		Username:      req.Username,
 		Email:         req.Email,
@@ -106,7 +112,7 @@ func (s *GRPCServer) CreateUser(ctx context.Context, req *keycloakv1.CreateUserR
 		LastName:      req.LastName,
 		Enabled:       req.Enabled,
 		EmailVerified: req.EmailVerified,
-		Attributes:    req.Attributes,
+		Attributes:    attributes,
 		Groups:        req.Groups,
 		RealmRoles:    req.Roles,
 	}
@@ -236,7 +242,12 @@ func (s *GRPCServer) UpdateUser(ctx context.Context, req *keycloakv1.UpdateUserR
 	existingUser.EmailVerified = req.EmailVerified
 	
 	if req.Attributes != nil {
-		existingUser.Attributes = req.Attributes
+		// Convert attributes from map[string]string to map[string]interface{}
+		attributes := make(map[string]interface{})
+		for k, v := range req.Attributes {
+			attributes[k] = v
+		}
+		existingUser.Attributes = attributes
 	}
 	if req.Groups != nil {
 		existingUser.Groups = req.Groups
@@ -468,6 +479,16 @@ func (s *GRPCServer) HealthCheck(ctx context.Context, req *emptypb.Empty) (*keyc
 // Helper functions
 
 func convertKeycloakUserToProto(kcUser *keycloak.User) *keycloakv1.User {
+	// Convert attributes from map[string]interface{} to map[string]string
+	attributes := make(map[string]string)
+	for k, v := range kcUser.Attributes {
+		if str, ok := v.(string); ok {
+			attributes[k] = str
+		} else if v != nil {
+			attributes[k] = fmt.Sprintf("%v", v)
+		}
+	}
+
 	return &keycloakv1.User{
 		Id:              kcUser.ID,
 		Username:        kcUser.Username,
@@ -477,7 +498,7 @@ func convertKeycloakUserToProto(kcUser *keycloak.User) *keycloakv1.User {
 		Enabled:         kcUser.Enabled,
 		EmailVerified:   kcUser.EmailVerified,
 		CreatedTimestamp: timestamppb.New(time.Unix(kcUser.CreatedTimestamp/1000, 0)),
-		Attributes:      kcUser.Attributes,
+		Attributes:      attributes,
 		Groups:          kcUser.Groups,
 		Roles:           kcUser.RealmRoles,
 	}

@@ -1,0 +1,342 @@
+groups:
+  - name: auth-service-alerts
+    rules:
+      # High Error Rate Alerts
+      - alert: AuthServiceHighErrorRate
+        expr: |
+          (
+            rate(auth_service_http_requests_total{status_code=~"5.."}[5m]) /
+            rate(auth_service_http_requests_total[5m])
+          ) * 100 > 5
+        for: 2m
+        labels:
+          severity: critical
+          service: auth-service
+        annotations:
+          summary: "Auth Service has high error rate"
+          description: "Auth Service error rate is {{ $value }}% which is above the 5% threshold for more than 2 minutes."
+
+      - alert: AuthServiceClientErrorRate
+        expr: |
+          (
+            rate(auth_service_http_requests_total{status_code=~"4.."}[5m]) /
+            rate(auth_service_http_requests_total[5m])
+          ) * 100 > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: auth-service
+        annotations:
+          summary: "Auth Service has high client error rate"
+          description: "Auth Service client error rate is {{ $value }}% which is above the 10% threshold for more than 5 minutes."
+
+      # High Latency Alerts
+      - alert: AuthServiceHighLatency
+        expr: |
+          histogram_quantile(0.95, 
+            rate(auth_service_http_request_duration_seconds_bucket[5m])
+          ) > 1.0
+        for: 3m
+        labels:
+          severity: warning
+          service: auth-service
+        annotations:
+          summary: "Auth Service has high response latency"
+          description: "Auth Service 95th percentile latency is {{ $value }}s which is above 1s threshold for more than 3 minutes."
+
+      - alert: AuthServiceVeryHighLatency
+        expr: |
+          histogram_quantile(0.95, 
+            rate(auth_service_http_request_duration_seconds_bucket[5m])
+          ) > 2.0
+        for: 1m
+        labels:
+          severity: critical
+          service: auth-service
+        annotations:
+          summary: "Auth Service has very high response latency"
+          description: "Auth Service 95th percentile latency is {{ $value }}s which is above 2s critical threshold."
+
+      # JWT Validation Alerts
+      - alert: JWTValidationFailureRate
+        expr: |
+          (
+            rate(auth_service_jwt_validation_total{result="failure"}[5m]) /
+            rate(auth_service_jwt_validation_total[5m])
+          ) * 100 > 15
+        for: 3m
+        labels:
+          severity: warning
+          service: auth-service
+        annotations:
+          summary: "High JWT validation failure rate"
+          description: "JWT validation failure rate is {{ $value }}% which is above 15% threshold for more than 3 minutes."
+
+      - alert: JWTValidationHighLatency
+        expr: |
+          histogram_quantile(0.95, 
+            rate(auth_service_jwt_validation_duration_seconds_bucket[5m])
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: auth-service
+        annotations:
+          summary: "JWT validation is slow"
+          description: "JWT validation 95th percentile latency is {{ $value }}s which is above 500ms threshold."
+
+      # Keycloak Integration Alerts
+      - alert: KeycloakHighErrorRate
+        expr: |
+          (
+            rate(auth_service_keycloak_errors_total[5m]) /
+            rate(auth_service_keycloak_requests_total[5m])
+          ) * 100 > 10
+        for: 2m
+        labels:
+          severity: critical
+          service: auth-service
+          component: keycloak
+        annotations:
+          summary: "High Keycloak operation error rate"
+          description: "Keycloak operation error rate is {{ $value }}% which is above 10% threshold for more than 2 minutes."
+
+      - alert: KeycloakHighLatency
+        expr: |
+          histogram_quantile(0.95, 
+            rate(auth_service_keycloak_request_duration_seconds_bucket[5m])
+          ) > 2.0
+        for: 3m
+        labels:
+          severity: warning
+          service: auth-service
+          component: keycloak
+        annotations:
+          summary: "Keycloak operations are slow"
+          description: "Keycloak 95th percentile latency is {{ $value }}s which is above 2s threshold for more than 3 minutes."
+
+      - alert: KeycloakAdminTokenRefreshFailure
+        expr: |
+          rate(auth_service_keycloak_admin_token_refresh_total{result="failure"}[5m]) > 0.1
+        for: 1m
+        labels:
+          severity: critical
+          service: auth-service
+          component: keycloak
+        annotations:
+          summary: "Keycloak admin token refresh failures"
+          description: "Keycloak admin token refresh is failing at {{ $value }} failures per second."
+
+      # Cache Performance Alerts
+      - alert: CacheLowHitRatio
+        expr: |
+          auth_service_cache_hit_ratio < 0.8
+        for: 10m
+        labels:
+          severity: warning
+          service: auth-service
+          component: cache
+        annotations:
+          summary: "Low cache hit ratio"
+          description: "Cache hit ratio for {{ $labels.cache_type }} is {{ $value }} which is below 80% threshold."
+
+      - alert: CacheHighLatency
+        expr: |
+          histogram_quantile(0.95, 
+            rate(auth_service_cache_operation_duration_seconds_bucket[5m])
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: auth-service
+          component: cache
+        annotations:
+          summary: "High cache operation latency"
+          description: "Cache operation 95th percentile latency is {{ $value }}s which is above 100ms threshold."
+
+      # Service Availability Alerts
+      - alert: AuthServiceDown
+        expr: |
+          up{job="auth-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: auth-service
+        annotations:
+          summary: "Auth Service is down"
+          description: "Auth Service has been down for more than 1 minute."
+
+      - alert: AuthServiceLowRequestRate
+        expr: |
+          rate(auth_service_http_requests_total[5m]) < 0.1
+        for: 10m
+        labels:
+          severity: warning
+          service: auth-service
+        annotations:
+          summary: "Auth Service has very low request rate"
+          description: "Auth Service request rate is {{ $value }} requests/second which may indicate service issues."
+
+      # Authentication Failure Alerts
+      - alert: HighAuthenticationFailureRate
+        expr: |
+          rate(auth_service_auth_failures_total[5m]) > 1.0
+        for: 3m
+        labels:
+          severity: warning
+          service: auth-service
+          component: authentication
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Authentication failures are occurring at {{ $value }} failures per second for {{ $labels.reason }}."
+
+      - alert: SuspiciousAuthenticationActivity
+        expr: |
+          rate(auth_service_auth_failures_total[1m]) > 5.0
+        for: 30s
+        labels:
+          severity: critical
+          service: auth-service
+          component: security
+        annotations:
+          summary: "Suspicious authentication activity detected"
+          description: "Very high authentication failure rate of {{ $value }} failures per second may indicate a security attack."
+
+      # Resource Usage Alerts
+      - alert: HighGoroutineCount
+        expr: |
+          auth_service_goroutines > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: auth-service
+          component: runtime
+        annotations:
+          summary: "High goroutine count"
+          description: "Auth Service has {{ $value }} goroutines which is above 1000 threshold."
+
+      - alert: HighMemoryUsage
+        expr: |
+          auth_service_memory_usage_bytes{type="heap"} > 500 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warning
+          service: auth-service
+          component: runtime
+        annotations:
+          summary: "High memory usage"
+          description: "Auth Service heap memory usage is {{ $value | humanize }}B which is above 500MB threshold."
+
+  - name: auth-service-business-logic-alerts
+    rules:
+      # Business Logic Alerts
+      - alert: HighUserOperationFailureRate
+        expr: |
+          (
+            rate(auth_service_user_operations_total{result="failure"}[5m]) /
+            rate(auth_service_user_operations_total[5m])
+          ) * 100 > 20
+        for: 5m
+        labels:
+          severity: warning
+          service: auth-service
+          component: business-logic
+        annotations:
+          summary: "High user operation failure rate"
+          description: "User operation failure rate is {{ $value }}% for {{ $labels.operation }}."
+
+      - alert: HighTokenOperationFailureRate
+        expr: |
+          (
+            rate(auth_service_token_operations_total{result="failure"}[5m]) /
+            rate(auth_service_token_operations_total[5m])
+          ) * 100 > 15
+        for: 3m
+        labels:
+          severity: warning
+          service: auth-service
+          component: business-logic
+        annotations:
+          summary: "High token operation failure rate"
+          description: "Token operation failure rate is {{ $value }}% for {{ $labels.operation }}."
+
+      # JWKS Cache Alerts
+      - alert: JWKSCacheMissRate
+        expr: |
+          (
+            rate(auth_service_jwks_cache_hits_total{result="miss"}[5m]) /
+            rate(auth_service_jwks_cache_hits_total[5m])
+          ) * 100 > 50
+        for: 10m
+        labels:
+          severity: warning
+          service: auth-service
+          component: jwks-cache
+        annotations:
+          summary: "High JWKS cache miss rate"
+          description: "JWKS cache miss rate is {{ $value }}% for {{ $labels.cache_type }} which may impact performance."
+
+  - name: auth-service-dependency-alerts
+    rules:
+      # External Dependency Alerts
+      - alert: RedisConnectionIssues
+        expr: |
+          auth_service_database_connections{database="redis",state="active"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: auth-service
+          component: redis
+        annotations:
+          summary: "Redis connection issues"
+          description: "No active Redis connections detected for Auth Service."
+
+      - alert: KeycloakConnectivityIssues
+        expr: |
+          (
+            rate(auth_service_keycloak_errors_total{error_type="http_error"}[5m]) /
+            rate(auth_service_keycloak_requests_total[5m])
+          ) * 100 > 50
+        for: 2m
+        labels:
+          severity: critical
+          service: auth-service
+          component: keycloak
+        annotations:
+          summary: "Keycloak connectivity issues"
+          description: "High rate of HTTP errors ({{ $value }}%) when connecting to Keycloak."
+
+  - name: auth-service-sla-alerts
+    rules:
+      # SLA-based Alerts
+      - alert: AuthServiceSLABreach
+        expr: |
+          (
+            (
+              rate(auth_service_http_requests_total{status_code=~"2.."}[5m]) +
+              rate(auth_service_http_requests_total{status_code=~"3.."}[5m])
+            ) /
+            rate(auth_service_http_requests_total[5m])
+          ) * 100 < 99.5
+        for: 5m
+        labels:
+          severity: critical
+          service: auth-service
+          component: sla
+        annotations:
+          summary: "Auth Service SLA breach"
+          description: "Auth Service availability is {{ $value }}% which is below 99.5% SLA threshold."
+
+      - alert: AuthServiceLatencySLABreach
+        expr: |
+          histogram_quantile(0.99, 
+            rate(auth_service_http_request_duration_seconds_bucket[5m])
+          ) > 3.0
+        for: 2m
+        labels:
+          severity: critical
+          service: auth-service
+          component: sla
+        annotations:
+          summary: "Auth Service latency SLA breach"
+          description: "Auth Service 99th percentile latency is {{ $value }}s which exceeds 3s SLA threshold."

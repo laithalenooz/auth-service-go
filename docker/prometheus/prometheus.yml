@@ -2,54 +2,57 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Load alerting rules
 rule_files:
-  # - "first_rules.yml"
-  # - "second_rules.yml"
+  - "alert-rules.yml"
+
+# Alertmanager configuration (optional - for alert routing)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
 
 scrape_configs:
-  # Prometheus itself
-  - job_name: 'prometheus'
-    static_configs:
-      - targets: ['localhost:9090']
-
-  # Auth service metrics
+  # Auth Service metrics
   - job_name: 'auth-service'
     static_configs:
       - targets: ['host.docker.internal:8080']
-    metrics_path: '/metrics'
-    scrape_interval: 15s
-    scrape_timeout: 10s
+    scrape_interval: 5s
+    metrics_path: /metrics
 
   # OpenTelemetry Collector metrics
   - job_name: 'otel-collector'
     static_configs:
       - targets: ['otel-collector:8888']
-    metrics_path: '/metrics'
-    scrape_interval: 15s
+    scrape_interval: 10s
 
-  # OpenTelemetry Collector Prometheus exporter
-  - job_name: 'otel-prometheus-exporter'
+  # OpenTelemetry Collector internal metrics
+  - job_name: 'otel-collector-internal'
     static_configs:
       - targets: ['otel-collector:8889']
-    metrics_path: '/metrics'
     scrape_interval: 15s
 
-  # Keycloak metrics (if enabled)
+  # Keycloak metrics (if available)
   - job_name: 'keycloak'
     static_configs:
       - targets: ['keycloak:8080']
-    metrics_path: '/metrics'
     scrape_interval: 30s
-    scrape_timeout: 10s
+    metrics_path: /auth/realms/master/metrics
 
-  # Redis metrics (if redis_exporter is added)
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Redis metrics (if redis_exporter is available)
   # - job_name: 'redis'
   #   static_configs:
   #     - targets: ['redis-exporter:9121']
+  #   scrape_interval: 15s
 
-  # Jaeger metrics
-  - job_name: 'jaeger'
-    static_configs:
-      - targets: ['jaeger:14269']
-    metrics_path: '/metrics'
-    scrape_interval: 15s
+  # Jaeger metrics (if available)
+  # - job_name: 'jaeger'
+  #   static_configs:
+  #     - targets: ['jaeger:14269']
+  #   scrape_interval: 15s

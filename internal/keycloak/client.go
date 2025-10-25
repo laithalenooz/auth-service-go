@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/laithalenooz/auth-service-go/internal/config"
+	"github.com/laithalenooz/auth-service-go/internal/metrics"
 )
 
 const tracerName = "keycloak-client"
@@ -30,6 +31,7 @@ type Client struct {
 	httpClient *http.Client
 	tracer     trace.Tracer
 	adminToken *AdminToken
+	metrics    *metrics.Metrics
 }
 
 // AdminToken represents an admin access token
@@ -43,20 +45,20 @@ type AdminToken struct {
 
 // User represents a Keycloak user
 type User struct {
-	ID                string            `json:"id,omitempty"`
-	Username          string            `json:"username"`
-	Email             string            `json:"email,omitempty"`
-	FirstName         string            `json:"firstName,omitempty"`
-	LastName          string            `json:"lastName,omitempty"`
-	Enabled           bool              `json:"enabled"`
-	EmailVerified     bool              `json:"emailVerified"`
-	CreatedTimestamp  int64             `json:"createdTimestamp,omitempty"`
-	Attributes        map[string]string `json:"attributes,omitempty"`
-	RequiredActions   []string          `json:"requiredActions,omitempty"`
-	Groups            []string          `json:"groups,omitempty"`
-	RealmRoles        []string          `json:"realmRoles,omitempty"`
-	ClientRoles       map[string]string `json:"clientRoles,omitempty"`
-	Credentials       []Credential      `json:"credentials,omitempty"`
+	ID                string                 `json:"id,omitempty"`
+	Username          string                 `json:"username"`
+	Email             string                 `json:"email,omitempty"`
+	FirstName         string                 `json:"firstName,omitempty"`
+	LastName          string                 `json:"lastName,omitempty"`
+	Enabled           bool                   `json:"enabled"`
+	EmailVerified     bool                   `json:"emailVerified"`
+	CreatedTimestamp  int64                  `json:"createdTimestamp,omitempty"`
+	Attributes        map[string]interface{} `json:"attributes,omitempty"`
+	RequiredActions   []string               `json:"requiredActions,omitempty"`
+	Groups            []string               `json:"groups,omitempty"`
+	RealmRoles        []string               `json:"realmRoles,omitempty"`
+	ClientRoles       map[string]interface{} `json:"clientRoles,omitempty"`
+	Credentials       []Credential           `json:"credentials,omitempty"`
 }
 
 // Credential represents user credentials
@@ -83,7 +85,7 @@ type TokenIntrospection struct {
 
 
 // NewClient creates a new Keycloak client with OpenTelemetry instrumentation
-func NewClient(config *config.KeycloakConfig) *Client {
+func NewClient(config *config.KeycloakConfig, m *metrics.Metrics) *Client {
 	// Create HTTP client with OpenTelemetry instrumentation
 	httpClient := &http.Client{
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
@@ -95,6 +97,7 @@ func NewClient(config *config.KeycloakConfig) *Client {
 		config:     config,
 		httpClient: httpClient,
 		tracer:     otel.Tracer(tracerName),
+		metrics:    m,
 	}
 }
 
@@ -177,6 +180,7 @@ func (c *Client) acquireAdminToken(ctx context.Context) error {
 
 // CreateUser creates a new user in Keycloak
 func (c *Client) CreateUser(ctx context.Context, user *User) (*User, error) {
+	start := time.Now()
 	ctx, span := c.tracer.Start(ctx, "keycloak.user.create",
 		trace.WithAttributes(
 			attribute.String("keycloak.realm", c.config.Realm),
@@ -189,6 +193,7 @@ func (c *Client) CreateUser(ctx context.Context, user *User) (*User, error) {
 	if err := c.ensureAdminToken(ctx); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to ensure admin token")
+		c.metrics.RecordKeycloakError("create_user", "admin_token_error")
 		return nil, err
 	}
 
@@ -198,6 +203,7 @@ func (c *Client) CreateUser(ctx context.Context, user *User) (*User, error) {
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to marshal user")
+		c.metrics.RecordKeycloakError("create_user", "marshal_error")
 		return nil, fmt.Errorf("failed to marshal user: %w", err)
 	}
 
@@ -205,6 +211,7 @@ func (c *Client) CreateUser(ctx context.Context, user *User) (*User, error) {
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to create request")
+		c.metrics.RecordKeycloakError("create_user", "request_creation_error")
 		return nil, fmt.Errorf("failed to create user request: %w", err)
 	}
 
@@ -212,24 +219,32 @@ func (c *Client) CreateUser(ctx context.Context, user *User) (*User, error) {
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.adminToken.AccessToken))
 
 	resp, err := c.httpClient.Do(req)
+	duration := time.Since(start)
+	
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "request failed")
+		c.metrics.RecordKeycloakRequest("create_user", "error", duration)
+		c.metrics.RecordKeycloakError("create_user", "http_error")
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 	defer resp.Body.Close()
+
+	statusCode := fmt.Sprintf("%d", resp.StatusCode)
+	c.metrics.RecordKeycloakRequest("create_user", statusCode, duration)
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		c.metrics.RecordKeycloakError("create_user", "http_status_error")
+		return nil, fmt.Errorf("failed to create user: HTTP %d: %s", resp.StatusCode, string(body))
+	}
 
 	span.SetAttributes(
 		attribute.Int("http.status_code", resp.StatusCode),
 		attribute.String("http.method", "POST"),
 		attribute.String("http.url", userURL),
 	)
-
-	if resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
-		return nil, fmt.Errorf("failed to create user: HTTP %d: %s", resp.StatusCode, string(body))
-	}
 
 	// Extract user ID from Location header
 	location := resp.Header.Get("Location")
@@ -326,6 +341,7 @@ func (c *Client) GetUser(ctx context.Context, userID string) (*User, error) {
 
 // IntrospectToken introspects a token to validate it
 func (c *Client) IntrospectToken(ctx context.Context, token string) (*TokenIntrospection, error) {
+	start := time.Now()
 	ctx, span := c.tracer.Start(ctx, "keycloak.token.introspect",
 		trace.WithAttributes(
 			attribute.String("keycloak.realm", c.config.Realm),
@@ -349,18 +365,26 @@ func (c *Client) IntrospectToken(ctx context.Context, token string) (*TokenIntro
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to create request")
+		c.metrics.RecordKeycloakError("introspect_token", "request_creation_error")
 		return nil, fmt.Errorf("failed to create introspect request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := c.httpClient.Do(req)
+	duration := time.Since(start)
+	
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "request failed")
+		c.metrics.RecordKeycloakRequest("introspect_token", "error", duration)
+		c.metrics.RecordKeycloakError("introspect_token", "http_error")
 		return nil, fmt.Errorf("failed to introspect token: %w", err)
 	}
 	defer resp.Body.Close()
+
+	statusCode := fmt.Sprintf("%d", resp.StatusCode)
+	c.metrics.RecordKeycloakRequest("introspect_token", statusCode, duration)
 
 	span.SetAttributes(
 		attribute.Int("http.status_code", resp.StatusCode),
@@ -371,6 +395,7 @@ func (c *Client) IntrospectToken(ctx context.Context, token string) (*TokenIntro
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		c.metrics.RecordKeycloakError("introspect_token", "http_status_error")
 		return nil, fmt.Errorf("failed to introspect token: HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -378,6 +403,7 @@ func (c *Client) IntrospectToken(ctx context.Context, token string) (*TokenIntro
 	if err := json.NewDecoder(resp.Body).Decode(&introspection); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to decode response")
+		c.metrics.RecordKeycloakError("introspect_token", "decode_error")
 		return nil, fmt.Errorf("failed to decode introspection response: %w", err)
 	}
 
