@@ -29,7 +29,7 @@ run: run-all ## Run both servers (default)
 
 # Development
 dev: ## Run in development mode with hot reload
-	air
+	~/go/bin/air
 
 # Testing
 test: ## Run tests
