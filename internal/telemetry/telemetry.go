@@ -74,10 +74,10 @@ func InitTracing(ctx context.Context, config *Config) (func(context.Context) err
 	// Try to create OTLP exporter, but don't fail if collector is not available
 	if config.OTLPEndpoint != "" {
 		// Create gRPC connection to OTLP collector with shorter timeout
-		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
 
-		conn, err := grpc.DialContext(ctx, config.OTLPEndpoint,
+		conn, err := grpc.DialContext(timeoutCtx, config.OTLPEndpoint,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),
 		)

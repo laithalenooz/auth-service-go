@@ -48,8 +48,8 @@ func main() {
 		log.Fatalf("Failed to initialize telemetry: %v", err)
 	}
 	defer func() {
-		if err := shutdown(ctx); err != nil {
-			log.Printf("Failed to shutdown telemetry: %v", err)
+		if shutdownErr := shutdown(ctx); shutdownErr != nil {
+			log.Printf("Failed to shutdown telemetry: %v", shutdownErr)
 		}
 	}()
 
@@ -250,8 +250,8 @@ func createUserHandler(grpcPort int) gin.HandlerFunc {
 		defer conn.Close()
 
 		var req keycloakv1.CreateUserRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, gin.H{"error": err.Error()})
+		if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
+			c.JSON(400, gin.H{"error": bindErr.Error()})
 			return
 		}
 
@@ -298,8 +298,8 @@ func updateUserHandler(grpcPort int) gin.HandlerFunc {
 
 		userID := c.Param("id")
 		var req keycloakv1.UpdateUserRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, gin.H{"error": err.Error()})
+		if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
+			c.JSON(400, gin.H{"error": bindErr.Error()})
 			return
 		}
 		req.UserId = userID
@@ -378,8 +378,8 @@ func introspectTokenHandler(grpcPort int) gin.HandlerFunc {
 		defer conn.Close()
 
 		var req keycloakv1.IntrospectTokenRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, gin.H{"error": err.Error()})
+		if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
+			c.JSON(400, gin.H{"error": bindErr.Error()})
 			return
 		}
 
@@ -403,8 +403,8 @@ func refreshTokenHandler(grpcPort int) gin.HandlerFunc {
 		defer conn.Close()
 
 		var req keycloakv1.RefreshTokenRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, gin.H{"error": err.Error()})
+		if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
+			c.JSON(400, gin.H{"error": bindErr.Error()})
 			return
 		}
 

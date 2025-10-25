@@ -3,7 +3,6 @@ module github.com/laithalenooz/auth-service-go
 go 1.25
 
 require (
-
 	// HTTP client and utilities
 	github.com/gin-gonic/gin v1.10.0
 	github.com/golang-jwt/jwt/v5 v5.2.1

@@ -515,10 +515,10 @@ func (c *Client) ListUsers(ctx context.Context, page, pageSize int, search, emai
 	}
 
 	var users []*User
-	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
-		span.RecordError(err)
+	if decodeErr := json.NewDecoder(resp.Body).Decode(&users); decodeErr != nil {
+		span.RecordError(decodeErr)
 		span.SetStatus(codes.Error, "failed to decode response")
-		return nil, 0, fmt.Errorf("failed to decode users response: %w", err)
+		return nil, 0, fmt.Errorf("failed to decode users response: %w", decodeErr)
 	}
 
 	// Get total count (requires separate request)

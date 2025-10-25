@@ -252,7 +252,7 @@ func (am *AuthMiddleware) validateToken(ctx context.Context, tokenString string)
 	// Parse and validate token with public key
 	parsedToken, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		// Verify signing method
-		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+		if _, validMethod := token.Method.(*jwt.SigningMethodRSA); !validMethod {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return publicKey, nil
@@ -308,8 +308,8 @@ func (am *AuthMiddleware) getPublicKey(ctx context.Context, kid string) (*rsa.Pu
 	jwksData, found, err := am.cacheClient.GetJWKS(ctx, am.config.Keycloak.Realm)
 	if err == nil && found {
 		if jwks, ok := jwksData.(*JWKS); ok {
-			publicKey, err := am.extractPublicKey(jwks, kid)
-			if err == nil {
+			publicKey, extractErr := am.extractPublicKey(jwks, kid)
+			if extractErr == nil {
 				am.jwksCache[kid] = publicKey
 				span.SetAttributes(attribute.Bool("jwks.redis_hit", true))
 				span.SetStatus(codes.Ok, "public key retrieved from Redis")
@@ -329,9 +329,9 @@ func (am *AuthMiddleware) getPublicKey(ctx context.Context, kid string) (*rsa.Pu
 	}
 
 	// Cache JWKS in Redis
-	if err := am.cacheClient.SetJWKS(ctx, am.config.Keycloak.Realm, jwks, 1*time.Hour); err != nil {
+	if cacheErr := am.cacheClient.SetJWKS(ctx, am.config.Keycloak.Realm, jwks, 1*time.Hour); cacheErr != nil {
 		span.AddEvent("failed to cache JWKS", trace.WithAttributes(
-			attribute.String("error", err.Error()),
+			attribute.String("error", cacheErr.Error()),
 		))
 	}
 
