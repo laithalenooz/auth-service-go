@@ -125,7 +125,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"email\": \"{{test_email}}\",\n    \"firstName\": \"Test\",\n    \"lastName\": \"User\",\n    \"enabled\": true,\n    \"emailVerified\": false,\n    \"attributes\": {\n        \"department\": \"engineering\",\n        \"role\": \"developer\"\n    },\n    \"credentials\": [\n        {\n            \"type\": \"password\",\n            \"value\": \"TestPassword123!\",\n            \"temporary\": false\n        }\n    ]\n}"
+							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"email\": \"{{test_email}}\",\n    \"first_name\": \"Test\",\n    \"last_name\": \"User\",\n    \"enabled\": true,\n    \"email_verified\": false,\n    \"attributes\": {\n        \"department\": \"engineering\",\n        \"role\": \"developer\"\n    },\n    \"credentials\": [\n        {\n            \"type\": \"password\",\n            \"value\": \"TestPassword123!\",\n            \"temporary\": false\n        }\n    ]\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/users",
