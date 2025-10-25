@@ -1,0 +1,145 @@
+syntax = "proto3";
+
+package keycloak.v1;
+
+option go_package = "github.com/laithalenooz/auth-service-go/gen/keycloak/v1;keycloakv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// KeycloakService provides operations for user management and token validation
+service KeycloakService {
+  // User Management Operations
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+  rpc DeleteUser(DeleteUserRequest) returns (google.protobuf.Empty);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+
+  // Token Operations
+  rpc IntrospectToken(IntrospectTokenRequest) returns (IntrospectTokenResponse);
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+
+  // Health Check
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);
+}
+
+// User Management Messages
+message User {
+  string id = 1;
+  string username = 2;
+  string email = 3;
+  string first_name = 4;
+  string last_name = 5;
+  bool enabled = 6;
+  bool email_verified = 7;
+  google.protobuf.Timestamp created_timestamp = 8;
+  map<string, string> attributes = 9;
+  repeated string groups = 10;
+  repeated string roles = 11;
+}
+
+message CreateUserRequest {
+  string username = 1;
+  string email = 2;
+  string first_name = 3;
+  string last_name = 4;
+  string password = 5;
+  bool enabled = 6;
+  bool email_verified = 7;
+  map<string, string> attributes = 8;
+  repeated string groups = 9;
+  repeated string roles = 10;
+}
+
+message CreateUserResponse {
+  User user = 1;
+}
+
+message GetUserRequest {
+  string user_id = 1;
+}
+
+message GetUserResponse {
+  User user = 1;
+}
+
+message UpdateUserRequest {
+  string user_id = 1;
+  string username = 2;
+  string email = 3;
+  string first_name = 4;
+  string last_name = 5;
+  bool enabled = 6;
+  bool email_verified = 7;
+  map<string, string> attributes = 8;
+  repeated string groups = 9;
+  repeated string roles = 10;
+}
+
+message UpdateUserResponse {
+  User user = 1;
+}
+
+message DeleteUserRequest {
+  string user_id = 1;
+}
+
+message ListUsersRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  string search = 3;
+  string email = 4;
+  string username = 5;
+}
+
+message ListUsersResponse {
+  repeated User users = 1;
+  int32 total_count = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// Token Operations Messages
+message IntrospectTokenRequest {
+  string token = 1;
+  string token_type_hint = 2; // "access_token" or "refresh_token"
+}
+
+message IntrospectTokenResponse {
+  bool active = 1;
+  string client_id = 2;
+  string username = 3;
+  string token_type = 4;
+  int64 exp = 5;
+  int64 iat = 6;
+  int64 nbf = 7;
+  string sub = 8;
+  string aud = 9;
+  string iss = 10;
+  string jti = 11;
+  repeated string scope = 12;
+  map<string, string> extra = 13;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+  string client_id = 2;
+  string client_secret = 3;
+}
+
+message RefreshTokenResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  string token_type = 3;
+  int32 expires_in = 4;
+  int32 refresh_expires_in = 5;
+  string scope = 6;
+}
+
+// Health Check Messages
+message HealthCheckResponse {
+  string status = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  map<string, string> dependencies = 3;
+}
