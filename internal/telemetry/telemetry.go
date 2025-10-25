@@ -69,36 +69,60 @@ func InitTracing(ctx context.Context, config *Config) (func(context.Context) err
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	// Create gRPC connection to OTLP collector
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
+	var tracerProvider *sdktrace.TracerProvider
 
-	conn, err := grpc.DialContext(ctx, config.OTLPEndpoint,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create gRPC connection to collector: %w", err)
+	// Try to create OTLP exporter, but don't fail if collector is not available
+	if config.OTLPEndpoint != "" {
+		// Create gRPC connection to OTLP collector with shorter timeout
+		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+
+		conn, err := grpc.DialContext(ctx, config.OTLPEndpoint,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(),
+		)
+		if err != nil {
+			fmt.Printf("Warning: Failed to connect to OTLP collector at %s: %v\n", config.OTLPEndpoint, err)
+			fmt.Println("Continuing without OTLP exporter. Traces will be processed but not exported.")
+			
+			// Create tracer provider without exporter
+			tracerProvider = sdktrace.NewTracerProvider(
+				sdktrace.WithResource(res),
+				sdktrace.WithSampler(createSampler(config.SamplingRatio)),
+			)
+		} else {
+			// Create OTLP trace exporter
+			traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
+			if err != nil {
+				fmt.Printf("Warning: Failed to create trace exporter: %v\n", err)
+				fmt.Println("Continuing without OTLP exporter.")
+				
+				// Create tracer provider without exporter
+				tracerProvider = sdktrace.NewTracerProvider(
+					sdktrace.WithResource(res),
+					sdktrace.WithSampler(createSampler(config.SamplingRatio)),
+				)
+			} else {
+				// Create batch span processor
+				bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
+
+				// Create tracer provider with exporter
+				tracerProvider = sdktrace.NewTracerProvider(
+					sdktrace.WithResource(res),
+					sdktrace.WithSpanProcessor(bsp),
+					sdktrace.WithSampler(createSampler(config.SamplingRatio)),
+				)
+				fmt.Printf("Successfully connected to OTLP collector at %s\n", config.OTLPEndpoint)
+			}
+		}
+	} else {
+		// No OTLP endpoint configured, create tracer provider without exporter
+		tracerProvider = sdktrace.NewTracerProvider(
+			sdktrace.WithResource(res),
+			sdktrace.WithSampler(createSampler(config.SamplingRatio)),
+		)
+		fmt.Println("No OTLP endpoint configured. Traces will be processed locally only.")
 	}
-
-	// Create OTLP trace exporter
-	traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
-	}
-
-	// Create batch span processor
-	bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
-
-	// Create sampler based on configuration
-	sampler := createSampler(config.SamplingRatio)
-
-	// Create tracer provider
-	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithResource(res),
-		sdktrace.WithSpanProcessor(bsp),
-		sdktrace.WithSampler(sampler),
-	)
 
 	// Set global tracer provider
 	otel.SetTracerProvider(tracerProvider)

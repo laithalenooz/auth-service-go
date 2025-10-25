@@ -9,21 +9,23 @@ help: ## Show this help message
 
 # Protobuf generation
 proto: ## Generate protobuf code
-	buf generate
+	~/go/bin/buf generate
 
 # Build
 build: proto ## Build the application
 	go build -o bin/auth-service ./cmd/server
 
 # Run services
-run-grpc: build ## Run gRPC server
+run-grpc: build ## Run gRPC server only
 	./bin/auth-service grpc
 
-run-gateway: build ## Run HTTP gateway
-	./bin/auth-service gateway
+run-http: build ## Run HTTP server only
+	./bin/auth-service http
 
-run-all: build ## Run both gRPC and HTTP gateway
+run-all: build ## Run both gRPC and HTTP servers
 	./bin/auth-service all
+
+run: run-all ## Run both servers (default)
 
 # Development
 dev: ## Run in development mode with hot reload

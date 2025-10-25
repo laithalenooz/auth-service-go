@@ -106,7 +106,7 @@ func (s *GRPCServer) CreateUser(ctx context.Context, req *keycloakv1.CreateUserR
 		LastName:      req.LastName,
 		Enabled:       req.Enabled,
 		EmailVerified: req.EmailVerified,
-		Attributes:    convertMapStringToStringSlice(req.Attributes),
+		Attributes:    req.Attributes,
 		Groups:        req.Groups,
 		RealmRoles:    req.Roles,
 	}
@@ -236,7 +236,7 @@ func (s *GRPCServer) UpdateUser(ctx context.Context, req *keycloakv1.UpdateUserR
 	existingUser.EmailVerified = req.EmailVerified
 	
 	if req.Attributes != nil {
-		existingUser.Attributes = convertMapStringToStringSlice(req.Attributes)
+		existingUser.Attributes = req.Attributes
 	}
 	if req.Groups != nil {
 		existingUser.Groups = req.Groups
@@ -306,14 +306,25 @@ func (s *GRPCServer) ListUsers(ctx context.Context, req *keycloakv1.ListUsersReq
 	)
 	defer span.End()
 
-	// Note: This would require implementing list users in the Keycloak client
-	// For now, we'll return an empty list
+	// Call Keycloak client to list users
+	users, totalCount, err := s.keycloakClient.ListUsers(ctx, int(req.Page), int(req.PageSize), req.Search, req.Email, req.Username)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(otelcodes.Error, "failed to list users")
+		return nil, status.Errorf(codes.Internal, "failed to list users: %v", err)
+	}
+
+	// Convert Keycloak users to protobuf users
+	protoUsers := make([]*keycloakv1.User, len(users))
+	for i, user := range users {
+		protoUsers[i] = convertKeycloakUserToProto(user)
+	}
 	
 	span.SetStatus(otelcodes.Ok, "users listed successfully")
 
 	return &keycloakv1.ListUsersResponse{
-		Users:      []*keycloakv1.User{},
-		TotalCount: 0,
+		Users:      protoUsers,
+		TotalCount: int32(totalCount),
 		Page:       req.Page,
 		PageSize:   req.PageSize,
 	}, nil
@@ -349,7 +360,7 @@ func (s *GRPCServer) IntrospectToken(ctx context.Context, req *keycloakv1.Intros
 	}
 
 	// Introspect token with Keycloak
-	introspection, err := s.keycloakClient.IntrospectToken(ctx, req.Token, req.TokenTypeHint)
+	introspection, err := s.keycloakClient.IntrospectToken(ctx, req.Token)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(otelcodes.Error, "failed to introspect token")
@@ -390,18 +401,23 @@ func (s *GRPCServer) RefreshToken(ctx context.Context, req *keycloakv1.RefreshTo
 		return nil, status.Error(codes.InvalidArgument, "refresh token is required")
 	}
 
-	// Note: This would require implementing token refresh in the Keycloak client
-	// For now, we'll return a placeholder response
+	// Call Keycloak client to refresh token
+	tokenResponse, err := s.keycloakClient.RefreshToken(ctx, req.RefreshToken, req.ClientId, req.ClientSecret)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(otelcodes.Error, "failed to refresh token")
+		return nil, status.Errorf(codes.Internal, "failed to refresh token: %v", err)
+	}
 	
 	span.SetStatus(otelcodes.Ok, "token refreshed successfully")
 
 	return &keycloakv1.RefreshTokenResponse{
-		AccessToken:       "new_access_token",
-		RefreshToken:      "new_refresh_token",
-		TokenType:         "Bearer",
-		ExpiresIn:         3600,
-		RefreshExpiresIn:  7200,
-		Scope:             "openid profile email",
+		AccessToken:       tokenResponse.AccessToken,
+		RefreshToken:      tokenResponse.RefreshToken,
+		TokenType:         tokenResponse.TokenType,
+		ExpiresIn:         int32(tokenResponse.ExpiresIn),
+		RefreshExpiresIn:  int32(tokenResponse.RefreshExpiresIn),
+		Scope:             tokenResponse.Scope,
 	}, nil
 }
 
@@ -452,13 +468,6 @@ func (s *GRPCServer) HealthCheck(ctx context.Context, req *emptypb.Empty) (*keyc
 // Helper functions
 
 func convertKeycloakUserToProto(kcUser *keycloak.User) *keycloakv1.User {
-	attributes := make(map[string]string)
-	for key, values := range kcUser.Attributes {
-		if len(values) > 0 {
-			attributes[key] = values[0] // Take first value
-		}
-	}
-
 	return &keycloakv1.User{
 		Id:              kcUser.ID,
 		Username:        kcUser.Username,
@@ -468,28 +477,13 @@ func convertKeycloakUserToProto(kcUser *keycloak.User) *keycloakv1.User {
 		Enabled:         kcUser.Enabled,
 		EmailVerified:   kcUser.EmailVerified,
 		CreatedTimestamp: timestamppb.New(time.Unix(kcUser.CreatedTimestamp/1000, 0)),
-		Attributes:      attributes,
+		Attributes:      kcUser.Attributes,
 		Groups:          kcUser.Groups,
 		Roles:           kcUser.RealmRoles,
 	}
 }
 
-func convertMapStringToStringSlice(m map[string]string) map[string][]string {
-	result := make(map[string][]string)
-	for key, value := range m {
-		result[key] = []string{value}
-	}
-	return result
-}
-
 func convertTokenIntrospectionToProto(introspection *keycloak.TokenIntrospection) *keycloakv1.IntrospectTokenResponse {
-	extra := make(map[string]string)
-	for key, value := range introspection.Extra {
-		if str, ok := value.(string); ok {
-			extra[key] = str
-		}
-	}
-
 	return &keycloakv1.IntrospectTokenResponse{
 		Active:    introspection.Active,
 		ClientId:  introspection.ClientID,
@@ -497,13 +491,10 @@ func convertTokenIntrospectionToProto(introspection *keycloak.TokenIntrospection
 		TokenType: introspection.TokenType,
 		Exp:       introspection.Exp,
 		Iat:       introspection.Iat,
-		Nbf:       introspection.Nbf,
 		Sub:       introspection.Sub,
 		Aud:       introspection.Aud,
 		Iss:       introspection.Iss,
-		Jti:       introspection.Jti,
 		Scope:     []string{introspection.Scope},
-		Extra:     extra,
 	}
 }
 

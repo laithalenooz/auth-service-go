@@ -3,6 +3,7 @@ package keycloak
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,23 +17,22 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+
 	"github.com/laithalenooz/auth-service-go/internal/config"
 )
 
-const (
-	tracerName = "keycloak-client"
-)
+const tracerName = "keycloak-client"
 
-// Client represents an instrumented Keycloak client
+// Client represents a Keycloak HTTP client with OpenTelemetry instrumentation
 type Client struct {
+	baseURL    string
 	config     *config.KeycloakConfig
 	httpClient *http.Client
 	tracer     trace.Tracer
-	baseURL    string
 	adminToken *AdminToken
 }
 
-// AdminToken holds admin authentication token
+// AdminToken represents an admin access token
 type AdminToken struct {
 	AccessToken  string    `json:"access_token"`
 	TokenType    string    `json:"token_type"`
@@ -43,79 +43,73 @@ type AdminToken struct {
 
 // User represents a Keycloak user
 type User struct {
-	ID              string            `json:"id,omitempty"`
-	Username        string            `json:"username"`
-	Email           string            `json:"email,omitempty"`
-	FirstName       string            `json:"firstName,omitempty"`
-	LastName        string            `json:"lastName,omitempty"`
-	Enabled         bool              `json:"enabled"`
-	EmailVerified   bool              `json:"emailVerified"`
-	CreatedTimestamp int64            `json:"createdTimestamp,omitempty"`
-	Attributes      map[string][]string `json:"attributes,omitempty"`
-	Groups          []string          `json:"groups,omitempty"`
-	RealmRoles      []string          `json:"realmRoles,omitempty"`
+	ID                string            `json:"id,omitempty"`
+	Username          string            `json:"username"`
+	Email             string            `json:"email,omitempty"`
+	FirstName         string            `json:"firstName,omitempty"`
+	LastName          string            `json:"lastName,omitempty"`
+	Enabled           bool              `json:"enabled"`
+	EmailVerified     bool              `json:"emailVerified"`
+	CreatedTimestamp  int64             `json:"createdTimestamp,omitempty"`
+	Attributes        map[string]string `json:"attributes,omitempty"`
+	RequiredActions   []string          `json:"requiredActions,omitempty"`
+	Groups            []string          `json:"groups,omitempty"`
+	RealmRoles        []string          `json:"realmRoles,omitempty"`
+	ClientRoles       map[string]string `json:"clientRoles,omitempty"`
+	Credentials       []Credential      `json:"credentials,omitempty"`
+}
+
+// Credential represents user credentials
+type Credential struct {
+	Type      string `json:"type"`
+	Value     string `json:"value"`
+	Temporary bool   `json:"temporary"`
 }
 
 // TokenIntrospection represents token introspection response
 type TokenIntrospection struct {
-	Active    bool              `json:"active"`
-	ClientID  string            `json:"client_id,omitempty"`
-	Username  string            `json:"username,omitempty"`
-	TokenType string            `json:"token_type,omitempty"`
-	Exp       int64             `json:"exp,omitempty"`
-	Iat       int64             `json:"iat,omitempty"`
-	Nbf       int64             `json:"nbf,omitempty"`
-	Sub       string            `json:"sub,omitempty"`
-	Aud       string            `json:"aud,omitempty"`
-	Iss       string            `json:"iss,omitempty"`
-	Jti       string            `json:"jti,omitempty"`
-	Scope     string            `json:"scope,omitempty"`
-	Extra     map[string]interface{} `json:"-"`
+	Active    bool   `json:"active"`
+	ClientID  string `json:"client_id,omitempty"`
+	Username  string `json:"username,omitempty"`
+	TokenType string `json:"token_type,omitempty"`
+	Exp       int64  `json:"exp,omitempty"`
+	Iat       int64  `json:"iat,omitempty"`
+	Sub       string `json:"sub,omitempty"`
+	Aud       string `json:"aud,omitempty"`
+	Iss       string `json:"iss,omitempty"`
+	Scope     string `json:"scope,omitempty"`
 }
 
-// NewClient creates a new instrumented Keycloak client
-func NewClient(cfg *config.KeycloakConfig) *Client {
+
+
+// NewClient creates a new Keycloak client with OpenTelemetry instrumentation
+func NewClient(config *config.KeycloakConfig) *Client {
 	// Create HTTP client with OpenTelemetry instrumentation
 	httpClient := &http.Client{
-		Timeout: time.Duration(cfg.Timeout) * time.Second,
-		Transport: otelhttp.NewTransport(
-			http.DefaultTransport,
-			otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
-				return fmt.Sprintf("keycloak %s %s", r.Method, r.URL.Path)
-			}),
-		),
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+		Timeout:   30 * time.Second,
 	}
 
 	return &Client{
-		config:     cfg,
+		baseURL:    config.BaseURL,
+		config:     config,
 		httpClient: httpClient,
 		tracer:     otel.Tracer(tracerName),
-		baseURL:    strings.TrimSuffix(cfg.BaseURL, "/"),
 	}
 }
 
 // ensureAdminToken ensures we have a valid admin token
 func (c *Client) ensureAdminToken(ctx context.Context) error {
-	ctx, span := c.tracer.Start(ctx, "keycloak.admin_token.ensure",
-		trace.WithAttributes(
-			attribute.String("keycloak.realm", c.config.Realm),
-			attribute.String("keycloak.client_id", c.config.ClientID),
-		),
-	)
-	defer span.End()
-
 	// Check if we have a valid token
 	if c.adminToken != nil && time.Now().Before(c.adminToken.ExpiresAt.Add(-30*time.Second)) {
-		span.SetAttributes(attribute.Bool("keycloak.admin_token.cached", true))
 		return nil
 	}
 
 	// Acquire new admin token
-	span.SetAttributes(attribute.Bool("keycloak.admin_token.refresh", true))
 	return c.acquireAdminToken(ctx)
 }
 
-// acquireAdminToken acquires a new admin token
+// acquireAdminToken acquires an admin access token
 func (c *Client) acquireAdminToken(ctx context.Context) error {
 	ctx, span := c.tracer.Start(ctx, "keycloak.admin_token.acquire",
 		trace.WithAttributes(
@@ -128,13 +122,9 @@ func (c *Client) acquireAdminToken(ctx context.Context) error {
 	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", c.baseURL, c.config.Realm)
 
 	data := url.Values{}
-	data.Set("grant_type", "password")
+	data.Set("grant_type", "client_credentials")
 	data.Set("client_id", c.config.ClientID)
-	if c.config.ClientSecret != "" {
-		data.Set("client_secret", c.config.ClientSecret)
-	}
-	data.Set("username", c.config.AdminUsername)
-	data.Set("password", c.config.AdminPassword)
+	data.Set("client_secret", c.config.ClientSecret)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
@@ -172,14 +162,15 @@ func (c *Client) acquireAdminToken(ctx context.Context) error {
 		return fmt.Errorf("failed to decode token response: %w", err)
 	}
 
+	// Set expiration time
 	token.ExpiresAt = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
 	c.adminToken = &token
 
 	span.SetAttributes(
-		attribute.Int("keycloak.token.expires_in", token.ExpiresIn),
 		attribute.String("keycloak.token.type", token.TokenType),
+		attribute.Int("keycloak.token.expires_in", token.ExpiresIn),
 	)
-	span.SetStatus(codes.Ok, "admin token acquired")
+	span.SetStatus(codes.Ok, "admin token acquired successfully")
 
 	return nil
 }
@@ -203,14 +194,14 @@ func (c *Client) CreateUser(ctx context.Context, user *User) (*User, error) {
 
 	userURL := fmt.Sprintf("%s/admin/realms/%s/users", c.baseURL, c.config.Realm)
 
-	body, err := json.Marshal(user)
+	userJSON, err := json.Marshal(user)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to marshal user")
 		return nil, fmt.Errorf("failed to marshal user: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", userURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", userURL, bytes.NewBuffer(userJSON))
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to create request")
@@ -255,18 +246,14 @@ func (c *Client) CreateUser(ctx context.Context, user *User) (*User, error) {
 	}
 	userID := parts[len(parts)-1]
 
-	// Fetch the created user
-	createdUser, err := c.GetUser(ctx, userID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to fetch created user")
-		return nil, fmt.Errorf("failed to fetch created user: %w", err)
-	}
+	// Return user with ID
+	createdUser := *user
+	createdUser.ID = userID
 
-	span.SetAttributes(attribute.String("keycloak.user.id", createdUser.ID))
+	span.SetAttributes(attribute.String("keycloak.user.id", userID))
 	span.SetStatus(codes.Ok, "user created successfully")
 
-	return createdUser, nil
+	return &createdUser, nil
 }
 
 // GetUser retrieves a user by ID
@@ -337,29 +324,26 @@ func (c *Client) GetUser(ctx context.Context, userID string) (*User, error) {
 	return &user, nil
 }
 
-// IntrospectToken introspects a token
-func (c *Client) IntrospectToken(ctx context.Context, token, tokenTypeHint string) (*TokenIntrospection, error) {
+// IntrospectToken introspects a token to validate it
+func (c *Client) IntrospectToken(ctx context.Context, token string) (*TokenIntrospection, error) {
 	ctx, span := c.tracer.Start(ctx, "keycloak.token.introspect",
 		trace.WithAttributes(
 			attribute.String("keycloak.realm", c.config.Realm),
-			attribute.String("keycloak.token.type_hint", tokenTypeHint),
+			attribute.String("keycloak.client_id", c.config.ClientID),
 		),
 	)
 	defer span.End()
 
-	if err := c.ensureAdminToken(ctx); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to ensure admin token")
-		return nil, err
-	}
+	// Hash the token for logging (don't log the actual token)
+	tokenHash := fmt.Sprintf("%x", sha256.Sum256([]byte(token)))
+	span.SetAttributes(attribute.String("keycloak.token.hash", tokenHash[:16]))
 
 	introspectURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token/introspect", c.baseURL, c.config.Realm)
 
 	data := url.Values{}
 	data.Set("token", token)
-	if tokenTypeHint != "" {
-		data.Set("token_type_hint", tokenTypeHint)
-	}
+	data.Set("client_id", c.config.ClientID)
+	data.Set("client_secret", c.config.ClientSecret)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", introspectURL, strings.NewReader(data.Encode()))
 	if err != nil {
@@ -369,7 +353,6 @@ func (c *Client) IntrospectToken(ctx context.Context, token, tokenTypeHint strin
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.adminToken.AccessToken))
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -400,10 +383,288 @@ func (c *Client) IntrospectToken(ctx context.Context, token, tokenTypeHint strin
 
 	span.SetAttributes(
 		attribute.Bool("keycloak.token.active", introspection.Active),
-		attribute.String("keycloak.token.client_id", introspection.ClientID),
 		attribute.String("keycloak.token.username", introspection.Username),
+		attribute.String("keycloak.token.client_id", introspection.ClientID),
 	)
 	span.SetStatus(codes.Ok, "token introspected successfully")
 
 	return &introspection, nil
+}
+
+// DeleteUser deletes a user by ID
+func (c *Client) DeleteUser(ctx context.Context, userID string) error {
+	ctx, span := c.tracer.Start(ctx, "keycloak.user.delete",
+		trace.WithAttributes(
+			attribute.String("keycloak.realm", c.config.Realm),
+			attribute.String("keycloak.user.id", userID),
+		),
+	)
+	defer span.End()
+
+	if err := c.ensureAdminToken(ctx); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to ensure admin token")
+		return err
+	}
+
+	userURL := fmt.Sprintf("%s/admin/realms/%s/users/%s", c.baseURL, c.config.Realm, userID)
+
+	req, err := http.NewRequestWithContext(ctx, "DELETE", userURL, nil)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create request")
+		return fmt.Errorf("failed to create delete user request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.adminToken.AccessToken))
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "request failed")
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+	defer resp.Body.Close()
+
+	span.SetAttributes(
+		attribute.Int("http.status_code", resp.StatusCode),
+		attribute.String("http.method", "DELETE"),
+		attribute.String("http.url", userURL),
+	)
+
+	if resp.StatusCode == http.StatusNotFound {
+		span.SetStatus(codes.Error, "user not found")
+		return fmt.Errorf("user not found: %s", userID)
+	}
+
+	if resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		return fmt.Errorf("failed to delete user: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	span.SetStatus(codes.Ok, "user deleted successfully")
+	return nil
+}
+
+// ListUsers lists users with pagination and search
+func (c *Client) ListUsers(ctx context.Context, page, pageSize int, search, email, username string) ([]*User, int, error) {
+	ctx, span := c.tracer.Start(ctx, "keycloak.user.list",
+		trace.WithAttributes(
+			attribute.String("keycloak.realm", c.config.Realm),
+			attribute.Int("page", page),
+			attribute.Int("page_size", pageSize),
+			attribute.String("search", search),
+		),
+	)
+	defer span.End()
+
+	if err := c.ensureAdminToken(ctx); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to ensure admin token")
+		return nil, 0, err
+	}
+
+	// Build query parameters
+	params := url.Values{}
+	if page > 0 {
+		params.Set("first", fmt.Sprintf("%d", (page-1)*pageSize))
+	}
+	if pageSize > 0 {
+		params.Set("max", fmt.Sprintf("%d", pageSize))
+	}
+	if search != "" {
+		params.Set("search", search)
+	}
+	if email != "" {
+		params.Set("email", email)
+	}
+	if username != "" {
+		params.Set("username", username)
+	}
+
+	userURL := fmt.Sprintf("%s/admin/realms/%s/users?%s", c.baseURL, c.config.Realm, params.Encode())
+
+	req, err := http.NewRequestWithContext(ctx, "GET", userURL, nil)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create request")
+		return nil, 0, fmt.Errorf("failed to create list users request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.adminToken.AccessToken))
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "request failed")
+		return nil, 0, fmt.Errorf("failed to list users: %w", err)
+	}
+	defer resp.Body.Close()
+
+	span.SetAttributes(
+		attribute.Int("http.status_code", resp.StatusCode),
+		attribute.String("http.method", "GET"),
+		attribute.String("http.url", userURL),
+	)
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		return nil, 0, fmt.Errorf("failed to list users: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var users []*User
+	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to decode response")
+		return nil, 0, fmt.Errorf("failed to decode users response: %w", err)
+	}
+
+	// Get total count (requires separate request)
+	totalCount, err := c.getUsersCount(ctx, search, email, username)
+	if err != nil {
+		span.AddEvent("failed to get users count", trace.WithAttributes(
+			attribute.String("error", err.Error()),
+		))
+		// Don't fail the request, just use the returned count
+		totalCount = len(users)
+	}
+
+	span.SetAttributes(
+		attribute.Int("keycloak.users.count", len(users)),
+		attribute.Int("keycloak.users.total", totalCount),
+	)
+	span.SetStatus(codes.Ok, "users listed successfully")
+
+	return users, totalCount, nil
+}
+
+// getUsersCount gets the total count of users
+func (c *Client) getUsersCount(ctx context.Context, search, email, username string) (int, error) {
+	ctx, span := c.tracer.Start(ctx, "keycloak.user.count")
+	defer span.End()
+
+	// Build query parameters
+	params := url.Values{}
+	if search != "" {
+		params.Set("search", search)
+	}
+	if email != "" {
+		params.Set("email", email)
+	}
+	if username != "" {
+		params.Set("username", username)
+	}
+
+	countURL := fmt.Sprintf("%s/admin/realms/%s/users/count?%s", c.baseURL, c.config.Realm, params.Encode())
+
+	req, err := http.NewRequestWithContext(ctx, "GET", countURL, nil)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create request")
+		return 0, fmt.Errorf("failed to create count request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.adminToken.AccessToken))
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "request failed")
+		return 0, fmt.Errorf("failed to get users count: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		return 0, fmt.Errorf("failed to get users count: HTTP %d", resp.StatusCode)
+	}
+
+	var count int
+	if err := json.NewDecoder(resp.Body).Decode(&count); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to decode response")
+		return 0, fmt.Errorf("failed to decode count response: %w", err)
+	}
+
+	span.SetAttributes(attribute.Int("keycloak.users.total_count", count))
+	span.SetStatus(codes.Ok, "users count retrieved")
+
+	return count, nil
+}
+
+// RefreshToken refreshes an access token using a refresh token
+func (c *Client) RefreshToken(ctx context.Context, refreshToken, clientID, clientSecret string) (*TokenResponse, error) {
+	ctx, span := c.tracer.Start(ctx, "keycloak.token.refresh",
+		trace.WithAttributes(
+			attribute.String("keycloak.realm", c.config.Realm),
+			attribute.String("keycloak.client_id", clientID),
+		),
+	)
+	defer span.End()
+
+	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", c.baseURL, c.config.Realm)
+
+	data := url.Values{}
+	data.Set("grant_type", "refresh_token")
+	data.Set("refresh_token", refreshToken)
+	data.Set("client_id", clientID)
+	if clientSecret != "" {
+		data.Set("client_secret", clientSecret)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create request")
+		return nil, fmt.Errorf("failed to create refresh token request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "request failed")
+		return nil, fmt.Errorf("failed to refresh token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	span.SetAttributes(
+		attribute.Int("http.status_code", resp.StatusCode),
+		attribute.String("http.method", "POST"),
+		attribute.String("http.url", tokenURL),
+	)
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		return nil, fmt.Errorf("failed to refresh token: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var tokenResponse TokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to decode response")
+		return nil, fmt.Errorf("failed to decode token response: %w", err)
+	}
+
+	span.SetAttributes(
+		attribute.String("keycloak.token.type", tokenResponse.TokenType),
+		attribute.Int("keycloak.token.expires_in", tokenResponse.ExpiresIn),
+	)
+	span.SetStatus(codes.Ok, "token refreshed successfully")
+
+	return &tokenResponse, nil
+}
+
+// TokenResponse represents the token refresh response
+type TokenResponse struct {
+	AccessToken      string `json:"access_token"`
+	RefreshToken     string `json:"refresh_token"`
+	TokenType        string `json:"token_type"`
+	ExpiresIn        int    `json:"expires_in"`
+	RefreshExpiresIn int    `json:"refresh_expires_in"`
+	Scope            string `json:"scope"`
 }

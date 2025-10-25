@@ -103,7 +103,7 @@ message ListUsersResponse {
 // Token Operations Messages
 message IntrospectTokenRequest {
   string token = 1;
-  string token_type_hint = 2; // "access_token" or "refresh_token"
+  string token_type_hint = 2;
 }
 
 message IntrospectTokenResponse {
