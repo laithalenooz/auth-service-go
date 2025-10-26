@@ -319,14 +319,16 @@ func (r *RedisHealthChecker) Check(ctx context.Context) *ComponentHealth {
 // KeycloakHealthChecker checks Keycloak connectivity and admin token validity
 type KeycloakHealthChecker struct {
 	client  *keycloak.Client
+	config  *config.KeycloakConfig
 	tracer  trace.Tracer
 	metrics *metrics.Metrics
 }
 
 // NewKeycloakHealthChecker creates a new Keycloak health checker
-func NewKeycloakHealthChecker(client *keycloak.Client, m *metrics.Metrics) *KeycloakHealthChecker {
+func NewKeycloakHealthChecker(client *keycloak.Client, cfg *config.KeycloakConfig, m *metrics.Metrics) *KeycloakHealthChecker {
 	return &KeycloakHealthChecker{
 		client:  client,
+		config:  cfg,
 		tracer:  otel.Tracer(tracerName),
 		metrics: m,
 	}
@@ -350,7 +352,8 @@ func (k *KeycloakHealthChecker) Check(ctx context.Context) *ComponentHealth {
 
 	// Test a simple API call (get users count with limit 1)
 	// This will internally ensure admin token is valid
-	_, _, err := k.client.ListUsers(ctx, 0, 1, "", "", "")
+	// Use config values for health check
+	_, _, err := k.client.ListUsers(ctx, k.config.Realm, k.config.ClientID, k.config.ClientSecret, 0, 1, "", "", "")
 	if err != nil {
 		health.Status = StatusUnhealthy
 		health.Message = fmt.Sprintf("Keycloak API test failed: %v", err)

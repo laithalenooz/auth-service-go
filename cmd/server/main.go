@@ -79,7 +79,7 @@ func main() {
 	// Initialize health service
 	healthService := health.NewHealthService(cfg, appMetrics)
 	healthService.RegisterChecker(health.NewRedisHealthChecker(cacheClient, appMetrics))
-	healthService.RegisterChecker(health.NewKeycloakHealthChecker(keycloakClient, appMetrics))
+	healthService.RegisterChecker(health.NewKeycloakHealthChecker(keycloakClient, &cfg.Keycloak, appMetrics))
 
 	// Start periodic health checks
 	go healthService.StartPeriodicHealthChecks(context.Background(), 30*time.Second)
@@ -305,11 +305,27 @@ func createUserHandler(grpcPort int) gin.HandlerFunc {
 		}
 		defer conn.Close()
 
+		// Extract realm and client parameters from headers
+		realmName := c.GetHeader("X-Realm-Name")
+		clientID := c.GetHeader("X-Client-Id")
+		clientSecret := c.GetHeader("X-Client-Secret")
+
+		// Validate required headers
+		if realmName == "" || clientID == "" || clientSecret == "" {
+			c.JSON(400, gin.H{"error": "X-Realm-Name, X-Client-Id, and X-Client-Secret headers are required"})
+			return
+		}
+
 		var req keycloakv1.CreateUserRequest
 		if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
 			c.JSON(400, gin.H{"error": bindErr.Error()})
 			return
 		}
+
+		// Set realm and client parameters from headers
+		req.RealmName = realmName
+		req.ClientId = clientID
+		req.ClientSecret = clientSecret
 
 		resp, err := client.CreateUser(c.Request.Context(), &req)
 		if err != nil {
@@ -368,12 +384,28 @@ func updateUserHandler(grpcPort int) gin.HandlerFunc {
 		}
 		defer conn.Close()
 
+		// Extract realm and client parameters from headers
+		realmName := c.GetHeader("X-Realm-Name")
+		clientID := c.GetHeader("X-Client-Id")
+		clientSecret := c.GetHeader("X-Client-Secret")
 		userID := c.Param("id")
+
+		// Validate required parameters
+		if realmName == "" || clientID == "" || clientSecret == "" {
+			c.JSON(400, gin.H{"error": "X-Realm-Name, X-Client-Id, and X-Client-Secret headers are required"})
+			return
+		}
+
 		var req keycloakv1.UpdateUserRequest
 		if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
 			c.JSON(400, gin.H{"error": bindErr.Error()})
 			return
 		}
+
+		// Set realm, client, and user parameters
+		req.RealmName = realmName
+		req.ClientId = clientID
+		req.ClientSecret = clientSecret
 		req.UserId = userID
 
 		resp, err := client.UpdateUser(c.Request.Context(), &req)
@@ -395,8 +427,24 @@ func deleteUserHandler(grpcPort int) gin.HandlerFunc {
 		}
 		defer conn.Close()
 
+		// Extract realm and client parameters from headers
+		realmName := c.GetHeader("X-Realm-Name")
+		clientID := c.GetHeader("X-Client-Id")
+		clientSecret := c.GetHeader("X-Client-Secret")
 		userID := c.Param("id")
-		req := &keycloakv1.DeleteUserRequest{UserId: userID}
+
+		// Validate required parameters
+		if realmName == "" || clientID == "" || clientSecret == "" {
+			c.JSON(400, gin.H{"error": "X-Realm-Name, X-Client-Id, and X-Client-Secret headers are required"})
+			return
+		}
+
+		req := &keycloakv1.DeleteUserRequest{
+			RealmName:    realmName,
+			ClientId:     clientID,
+			ClientSecret: clientSecret,
+			UserId:       userID,
+		}
 
 		_, err = client.DeleteUser(c.Request.Context(), req)
 		if err != nil {
@@ -417,17 +465,31 @@ func listUsersHandler(grpcPort int) gin.HandlerFunc {
 		}
 		defer conn.Close()
 
-		req := &keycloakv1.ListUsersRequest{
-			Page:     1,
-			PageSize: 10,
+		// Extract realm and client parameters from headers
+		realmName := c.GetHeader("X-Realm-Name")
+		clientID := c.GetHeader("X-Client-Id")
+		clientSecret := c.GetHeader("X-Client-Secret")
+
+		// Validate required headers
+		if realmName == "" || clientID == "" || clientSecret == "" {
+			c.JSON(400, gin.H{"error": "X-Realm-Name, X-Client-Id, and X-Client-Secret headers are required"})
+			return
 		}
 
 		// Parse query parameters
-		if page := c.Query("page"); page != "" {
-			// Parse page number
-		}
-		if pageSize := c.Query("page_size"); pageSize != "" {
-			// Parse page size
+		search := c.Query("search")
+		email := c.Query("email")
+		username := c.Query("username")
+
+		req := &keycloakv1.ListUsersRequest{
+			RealmName:    realmName,
+			ClientId:     clientID,
+			ClientSecret: clientSecret,
+			Page:         1,
+			PageSize:     10,
+			Search:       search,
+			Email:        email,
+			Username:     username,
 		}
 
 		resp, err := client.ListUsers(c.Request.Context(), req)
@@ -449,11 +511,27 @@ func introspectTokenHandler(grpcPort int) gin.HandlerFunc {
 		}
 		defer conn.Close()
 
+		// Extract realm and client parameters from headers
+		realmName := c.GetHeader("X-Realm-Name")
+		clientID := c.GetHeader("X-Client-Id")
+		clientSecret := c.GetHeader("X-Client-Secret")
+
+		// Validate required headers
+		if realmName == "" || clientID == "" || clientSecret == "" {
+			c.JSON(400, gin.H{"error": "X-Realm-Name, X-Client-Id, and X-Client-Secret headers are required"})
+			return
+		}
+
 		var req keycloakv1.IntrospectTokenRequest
 		if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
 			c.JSON(400, gin.H{"error": bindErr.Error()})
 			return
 		}
+
+		// Set realm and client parameters from headers
+		req.RealmName = realmName
+		req.ClientId = clientID
+		req.ClientSecret = clientSecret
 
 		resp, err := client.IntrospectToken(c.Request.Context(), &req)
 		if err != nil {
@@ -474,11 +552,27 @@ func refreshTokenHandler(grpcPort int) gin.HandlerFunc {
 		}
 		defer conn.Close()
 
-		var req keycloakv1.RefreshTokenRequest
-		if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
-			c.JSON(400, gin.H{"error": bindErr.Error()})
+		// Extract realm and client parameters from headers
+		realmName := c.GetHeader("X-Realm-Name")
+		clientID := c.GetHeader("X-Client-Id")
+		clientSecret := c.GetHeader("X-Client-Secret")
+
+		// Validate required headers
+		if realmName == "" || clientID == "" || clientSecret == "" {
+			c.JSON(400, gin.H{"error": "X-Realm-Name, X-Client-Id, and X-Client-Secret headers are required"})
 			return
 		}
+
+		var req keycloakv1.RefreshTokenRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Set realm and client parameters from headers
+		req.RealmName = realmName
+		req.ClientId = clientID
+		req.ClientSecret = clientSecret
 
 		resp, err := client.RefreshToken(c.Request.Context(), &req)
 		if err != nil {
@@ -499,11 +593,27 @@ func loginHandler(grpcPort int) gin.HandlerFunc {
 		}
 		defer conn.Close()
 
+		// Extract realm and client parameters from headers
+		realmName := c.GetHeader("X-Realm-Name")
+		clientID := c.GetHeader("X-Client-Id")
+		clientSecret := c.GetHeader("X-Client-Secret")
+
+		// Validate required headers
+		if realmName == "" || clientID == "" || clientSecret == "" {
+			c.JSON(400, gin.H{"error": "X-Realm-Name, X-Client-Id, and X-Client-Secret headers are required"})
+			return
+		}
+
 		var req keycloakv1.LoginRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
+
+		// Set realm and client parameters from headers
+		req.RealmName = realmName
+		req.ClientId = clientID
+		req.ClientSecret = clientSecret
 
 		resp, err := client.Login(c.Request.Context(), &req)
 		if err != nil {
@@ -524,11 +634,27 @@ func logoutHandler(grpcPort int) gin.HandlerFunc {
 		}
 		defer conn.Close()
 
+		// Extract realm and client parameters from headers
+		realmName := c.GetHeader("X-Realm-Name")
+		clientID := c.GetHeader("X-Client-Id")
+		clientSecret := c.GetHeader("X-Client-Secret")
+
+		// Validate required headers
+		if realmName == "" || clientID == "" || clientSecret == "" {
+			c.JSON(400, gin.H{"error": "X-Realm-Name, X-Client-Id, and X-Client-Secret headers are required"})
+			return
+		}
+
 		var req keycloakv1.LogoutRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
+
+		// Set realm and client parameters from headers
+		req.RealmName = realmName
+		req.ClientId = clientID
+		req.ClientSecret = clientSecret
 
 		_, err = client.Logout(c.Request.Context(), &req)
 		if err != nil {
@@ -549,11 +675,27 @@ func registerHandler(grpcPort int) gin.HandlerFunc {
 		}
 		defer conn.Close()
 
+		// Extract realm and client parameters from headers
+		realmName := c.GetHeader("X-Realm-Name")
+		clientID := c.GetHeader("X-Client-Id")
+		clientSecret := c.GetHeader("X-Client-Secret")
+
+		// Validate required headers
+		if realmName == "" || clientID == "" || clientSecret == "" {
+			c.JSON(400, gin.H{"error": "X-Realm-Name, X-Client-Id, and X-Client-Secret headers are required"})
+			return
+		}
+
 		var req keycloakv1.RegisterRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
+
+		// Set realm and client parameters from headers
+		req.RealmName = realmName
+		req.ClientId = clientID
+		req.ClientSecret = clientSecret
 
 		resp, err := client.Register(c.Request.Context(), &req)
 		if err != nil {
@@ -574,11 +716,27 @@ func resetPasswordHandler(grpcPort int) gin.HandlerFunc {
 		}
 		defer conn.Close()
 
+		// Extract realm and client parameters from headers
+		realmName := c.GetHeader("X-Realm-Name")
+		clientID := c.GetHeader("X-Client-Id")
+		clientSecret := c.GetHeader("X-Client-Secret")
+
+		// Validate required headers
+		if realmName == "" || clientID == "" || clientSecret == "" {
+			c.JSON(400, gin.H{"error": "X-Realm-Name, X-Client-Id, and X-Client-Secret headers are required"})
+			return
+		}
+
 		var req keycloakv1.ResetPasswordRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
+
+		// Set realm and client parameters from headers
+		req.RealmName = realmName
+		req.ClientId = clientID
+		req.ClientSecret = clientSecret
 
 		_, err = client.ResetPassword(c.Request.Context(), &req)
 		if err != nil {

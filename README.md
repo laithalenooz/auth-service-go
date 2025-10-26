@@ -148,24 +148,24 @@ The HTTP server runs on port `8080` by default and provides the following REST e
 #### Login
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "X-Realm-Name: master" \
+  -H "X-Client-Id: auth-service" \
+  -H "X-Client-Secret: hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK" \
   -H "Content-Type: application/json" \
   -d '{
-    "realm_name": "master",
     "username": "admin",
-    "password": "admin",
-    "client_id": "auth-service",
-    "client_secret": "hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK"
+    "password": "admin"
   }'
 ```
 
 #### Register User
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "X-Realm-Name: master" \
+  -H "X-Client-Id: auth-service" \
+  -H "X-Client-Secret: hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK" \
   -H "Content-Type: application/json" \
   -d '{
-    "realm_name": "master",
-    "client_id": "auth-service",
-    "client_secret": "hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK",
     "username": "newuser",
     "email": "newuser@example.com",
     "first_name": "New",
@@ -178,12 +178,12 @@ curl -X POST http://localhost:8080/api/v1/auth/register \
 #### Logout
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/logout \
+  -H "X-Realm-Name: master" \
+  -H "X-Client-Id: auth-service" \
+  -H "X-Client-Secret: hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK" \
   -H "Content-Type: application/json" \
   -d '{
-    "realm_name": "master",
-    "refresh_token": "your-refresh-token",
-    "client_id": "auth-service",
-    "client_secret": "hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK"
+    "refresh_token": "your-refresh-token"
   }'
 ```
 
@@ -192,11 +192,11 @@ curl -X POST http://localhost:8080/api/v1/auth/logout \
 #### Create User
 ```bash
 curl -X POST http://localhost:8080/api/v1/users \
+  -H "X-Realm-Name: master" \
+  -H "X-Client-Id: auth-service" \
+  -H "X-Client-Secret: hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK" \
   -H "Content-Type: application/json" \
   -d '{
-    "realm_name": "master",
-    "client_id": "auth-service",
-    "client_secret": "hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK",
     "username": "john.doe",
     "email": "john.doe@example.com",
     "first_name": "John",
@@ -217,11 +217,11 @@ curl -X GET http://localhost:8080/api/v1/users/{user-id} \
 #### Update User
 ```bash
 curl -X PUT http://localhost:8080/api/v1/users/{user-id} \
+  -H "X-Realm-Name: master" \
+  -H "X-Client-Id: auth-service" \
+  -H "X-Client-Secret: hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK" \
   -H "Content-Type: application/json" \
   -d '{
-    "realm_name": "master",
-    "client_id": "auth-service",
-    "client_secret": "hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK",
     "first_name": "Updated",
     "last_name": "Name",
     "enabled": true
@@ -233,11 +233,11 @@ curl -X PUT http://localhost:8080/api/v1/users/{user-id} \
 #### Introspect Token
 ```bash
 curl -X POST http://localhost:8080/api/v1/tokens/introspect \
+  -H "X-Realm-Name: master" \
+  -H "X-Client-Id: auth-service" \
+  -H "X-Client-Secret: hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK" \
   -H "Content-Type: application/json" \
   -d '{
-    "realm_name": "master",
-    "client_id": "auth-service",
-    "client_secret": "hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK",
     "token": "your-jwt-token",
     "token_type_hint": "access_token"
   }'
@@ -246,12 +246,12 @@ curl -X POST http://localhost:8080/api/v1/tokens/introspect \
 #### Refresh Token
 ```bash
 curl -X POST http://localhost:8080/api/v1/tokens/refresh \
+  -H "X-Realm-Name: master" \
+  -H "X-Client-Id: auth-service" \
+  -H "X-Client-Secret: hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK" \
   -H "Content-Type: application/json" \
   -d '{
-    "realm_name": "master",
-    "refresh_token": "your-refresh-token",
-    "client_id": "auth-service",
-    "client_secret": "hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK"
+    "refresh_token": "your-refresh-token"
   }'
 ```
 
@@ -294,24 +294,24 @@ The service supports multiple realms and clients dynamically:
 ### Different Realm Example
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "X-Realm-Name: company-realm" \
+  -H "X-Client-Id: company-app" \
+  -H "X-Client-Secret: company-secret" \
   -H "Content-Type: application/json" \
   -d '{
-    "realm_name": "company-realm",
     "username": "employee",
-    "password": "password",
-    "client_id": "company-app",
-    "client_secret": "company-secret"
+    "password": "password"
   }'
 ```
 
 ### Different Client Example
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "X-Realm-Name: master" \
+  -H "X-Client-Id: mobile-app" \
+  -H "X-Client-Secret: mobile-secret" \
   -H "Content-Type: application/json" \
   -d '{
-    "realm_name": "master",
-    "client_id": "mobile-app",
-    "client_secret": "mobile-secret",
     "username": "mobileuser",
     "email": "mobile@example.com",
     "password": "mobilepass"
@@ -578,10 +578,11 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - **Pure API Gateway**: Intelligent Keycloak proxy pattern
 
 ### 🔧 Breaking Changes
-- All API requests now require `realm_name`, `client_id`, and `client_secret`
+- All API requests now require `X-Realm-Name`, `X-Client-Id`, and `X-Client-Secret` headers
 - GET requests use headers for realm/client parameters
-- POST requests include parameters in JSON body
+- POST requests include parameters in headers (not body)
 - Server configuration no longer defines default realm/client
+- Field names use snake_case format (e.g., `refresh_token`, `token_type_hint`)
 
 ### 📈 Performance Improvements
 - Horizontal scalability with no server-side state
@@ -589,4 +590,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - Enhanced tracing with realm/client context
 - Optimized for cloud-native deployments
 
-**Migration Guide**: Update your API calls to include realm and client parameters as shown in the examples above.
+**Migration Guide**: Update your API calls to include realm and client parameters in headers as shown in the examples above. Ensure all field names use snake_case format (e.g., `refresh_token` instead of `refreshToken`).

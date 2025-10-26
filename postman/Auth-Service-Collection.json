@@ -17,11 +17,23 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"realm_name\": \"{{keycloak_realm}}\",\n    \"username\": \"{{keycloak_admin_username}}\",\n    \"password\": \"{{keycloak_admin_password}}\",\n    \"client_id\": \"{{keycloak_client_id}}\",\n    \"client_secret\": \"{{keycloak_client_secret}}\"\n}"
+							"raw": "{\n    \"username\": \"{{keycloak_admin_username}}\",\n    \"password\": \"{{keycloak_admin_password}}\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/login",
@@ -39,11 +51,23 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"realm_name\": \"{{keycloak_realm}}\",\n    \"refresh_token\": \"{{refresh_token}}\",\n    \"client_id\": \"{{keycloak_client_id}}\",\n    \"client_secret\": \"{{keycloak_client_secret}}\"\n}"
+							"raw": "{\n    \"refresh_token\": \"{{refresh_token}}\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/logout",
@@ -61,11 +85,23 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"realm_name\": \"{{keycloak_realm}}\",\n    \"client_id\": \"{{keycloak_client_id}}\",\n    \"client_secret\": \"{{keycloak_client_secret}}\",\n    \"username\": \"newuser\",\n    \"email\": \"newuser@example.com\",\n    \"first_name\": \"New\",\n    \"last_name\": \"User\",\n    \"password\": \"password123\",\n    \"email_verified\": false,\n    \"attributes\": {\n        \"department\": \"IT\"\n    }\n}"
+							"raw": "{\n    \"username\": \"newuser\",\n    \"email\": \"newuser@example.com\",\n    \"first_name\": \"New\",\n    \"last_name\": \"User\",\n    \"password\": \"password123\",\n    \"email_verified\": false,\n    \"attributes\": {\n        \"department\": \"IT\"\n    }\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/register",
@@ -83,11 +119,23 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"realm_name\": \"{{keycloak_realm}}\",\n    \"username\": \"{{keycloak_admin_username}}\",\n    \"email\": \"admin@example.com\",\n    \"client_id\": \"{{keycloak_client_id}}\",\n    \"client_secret\": \"{{keycloak_client_secret}}\",\n    \"redirect_uri\": \"http://localhost:8080/auth/reset-password-complete\"\n}"
+							"raw": "{\n    \"username\": \"{{keycloak_admin_username}}\",\n    \"email\": \"admin@example.com\",\n    \"redirect_uri\": \"http://localhost:8080/auth/reset-password-complete\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/reset-password",
@@ -106,7 +154,20 @@
 					"name": "Health Check (Cached)",
 					"request": {
 						"method": "GET",
-						"header": [],
+						"header": [
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
+							}
+						],
 						"url": {
 							"raw": "{{base_url}}/health",
 							"host": ["{{base_url}}"],
@@ -119,7 +180,20 @@
 					"name": "Health Check (Detailed)",
 					"request": {
 						"method": "GET",
-						"header": [],
+						"header": [
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
+							}
+						],
 						"url": {
 							"raw": "{{base_url}}/health/detailed",
 							"host": ["{{base_url}}"],
@@ -132,7 +206,20 @@
 					"name": "Readiness Probe",
 					"request": {
 						"method": "GET",
-						"header": [],
+						"header": [
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
+							}
+						],
 						"url": {
 							"raw": "{{base_url}}/ready",
 							"host": ["{{base_url}}"],
@@ -214,11 +301,23 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"realm_name\": \"{{keycloak_realm}}\",\n    \"client_id\": \"{{keycloak_client_id}}\",\n    \"client_secret\": \"{{keycloak_client_secret}}\",\n    \"username\": \"{{test_username}}\",\n    \"email\": \"{{test_email}}\",\n    \"first_name\": \"Test\",\n    \"last_name\": \"User\",\n    \"enabled\": true,\n    \"email_verified\": false,\n    \"attributes\": {\n        \"department\": \"engineering\",\n        \"role\": \"developer\"\n    },\n    \"credentials\": [\n        {\n            \"type\": \"password\",\n            \"value\": \"TestPassword123!\",\n            \"temporary\": false\n        }\n    ]\n}"
+							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"email\": \"{{test_email}}\",\n    \"first_name\": \"Test\",\n    \"last_name\": \"User\",\n    \"enabled\": true,\n    \"email_verified\": false,\n    \"attributes\": {\n        \"department\": \"engineering\",\n        \"role\": \"developer\"\n    },\n    \"credentials\": [\n        {\n            \"type\": \"password\",\n            \"value\": \"TestPassword123!\",\n            \"temporary\": false\n        }\n    ]\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/users",
@@ -294,6 +393,18 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
 							}
 						],
 						"body": {
@@ -329,7 +440,20 @@
 					],
 					"request": {
 						"method": "GET",
-						"header": [],
+						"header": [
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
+							}
+						],
 						"url": {
 							"raw": "{{base_url}}/api/v1/users?page=0&pageSize=10&search={{test_username}}",
 							"host": ["{{base_url}}"],
@@ -369,7 +493,20 @@
 					],
 					"request": {
 						"method": "DELETE",
-						"header": [],
+						"header": [
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
+							}
+						],
 						"url": {
 							"raw": "{{base_url}}/api/v1/users/{{created_user_id}}",
 							"host": ["{{base_url}}"],
@@ -407,11 +544,23 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"token\": \"{{test_token}}\",\n    \"tokenTypeHint\": \"access_token\"\n}"
+							"raw": "{\n    \"token\": \"{{test_token}}\",\n    \"token_type_hint\": \"access_token\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/tokens/introspect",
@@ -451,11 +600,23 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"refreshToken\": \"{{test_refresh_token}}\",\n    \"clientId\": \"{{keycloak_client_id}}\",\n    \"clientSecret\": \"{{keycloak_client_secret}}\"\n}"
+							"raw": "{\n    \"refresh_token\": \"{{test_refresh_token}}\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/tokens/refresh",

@@ -344,7 +344,7 @@ func (s *GRPCServer) ListUsers(ctx context.Context, req *keycloakv1.ListUsersReq
 	defer span.End()
 
 	// Call Keycloak client to list users
-	users, totalCount, err := s.keycloakClient.ListUsers(ctx, int(req.Page), int(req.PageSize), req.Search, req.Email, req.Username)
+	users, totalCount, err := s.keycloakClient.ListUsers(ctx, req.RealmName, req.ClientId, req.ClientSecret, int(req.Page), int(req.PageSize), req.Search, req.Email, req.Username)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(otelcodes.Error, "failed to list users")
@@ -638,7 +638,7 @@ func (s *GRPCServer) ResetPassword(ctx context.Context, req *keycloakv1.ResetPas
 	}
 
 	// Initiate password reset via Keycloak client
-	err := s.keycloakClient.ResetPassword(ctx, req.Username, req.Email, clientID, clientSecret, redirectURI)
+	err := s.keycloakClient.ResetPassword(ctx, req.RealmName, req.Username, req.Email, clientID, clientSecret, redirectURI)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(otelcodes.Error, "failed to reset password")

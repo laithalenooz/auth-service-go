@@ -26,12 +26,13 @@ const tracerName = "keycloak-client"
 
 // Client represents a Keycloak HTTP client with OpenTelemetry instrumentation
 type Client struct {
-	baseURL    string
-	config     *config.KeycloakConfig
-	httpClient *http.Client
-	tracer     trace.Tracer
-	adminToken *AdminToken
-	metrics    *metrics.Metrics
+	baseURL       string
+	config        *config.KeycloakConfig
+	httpClient    *http.Client
+	tracer        trace.Tracer
+	adminToken    *AdminToken
+	adminTokenKey string // Track which realm/client the current token is for
+	metrics       *metrics.Metrics
 }
 
 // AdminToken represents an admin access token
@@ -102,32 +103,33 @@ func NewClient(config *config.KeycloakConfig, m *metrics.Metrics) *Client {
 }
 
 // ensureAdminToken ensures we have a valid admin token
-func (c *Client) ensureAdminToken(ctx context.Context) error {
-	// Check if we have a valid token
-	if c.adminToken != nil && time.Now().Before(c.adminToken.ExpiresAt.Add(-30*time.Second)) {
+func (c *Client) ensureAdminToken(ctx context.Context, realm, clientID, clientSecret string) error {
+	// Check if we have a valid token for this specific realm/client combination
+	tokenKey := fmt.Sprintf("%s:%s", realm, clientID)
+	if c.adminToken != nil && c.adminTokenKey == tokenKey && time.Now().Before(c.adminToken.ExpiresAt.Add(-30*time.Second)) {
 		return nil
 	}
 
-	// Acquire new admin token
-	return c.acquireAdminToken(ctx)
+	// Acquire new admin token for the specific realm/client
+	return c.acquireAdminToken(ctx, realm, clientID, clientSecret)
 }
 
 // acquireAdminToken acquires an admin access token
-func (c *Client) acquireAdminToken(ctx context.Context) error {
+func (c *Client) acquireAdminToken(ctx context.Context, realm, clientID, clientSecret string) error {
 	ctx, span := c.tracer.Start(ctx, "keycloak.admin_token.acquire",
 		trace.WithAttributes(
-			attribute.String("keycloak.realm", c.config.Realm),
-			attribute.String("keycloak.client_id", c.config.ClientID),
+			attribute.String("keycloak.realm", realm),
+			attribute.String("keycloak.client_id", clientID),
 		),
 	)
 	defer span.End()
 
-	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", c.baseURL, c.config.Realm)
+	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", c.baseURL, realm)
 
 	data := url.Values{}
 	data.Set("grant_type", "client_credentials")
-	data.Set("client_id", c.config.ClientID)
-	data.Set("client_secret", c.config.ClientSecret)
+	data.Set("client_id", clientID)
+	data.Set("client_secret", clientSecret)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
@@ -168,6 +170,7 @@ func (c *Client) acquireAdminToken(ctx context.Context) error {
 	// Set expiration time
 	token.ExpiresAt = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
 	c.adminToken = &token
+	c.adminTokenKey = fmt.Sprintf("%s:%s", realm, clientID)
 
 	span.SetAttributes(
 		attribute.String("keycloak.token.type", token.TokenType),
@@ -190,7 +193,7 @@ func (c *Client) CreateUser(ctx context.Context, realm, clientID, clientSecret s
 	)
 	defer span.End()
 
-	if err := c.ensureAdminToken(ctx); err != nil {
+	if err := c.ensureAdminToken(ctx, realm, clientID, clientSecret); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to ensure admin token")
 		c.metrics.RecordKeycloakError("create_user", "admin_token_error")
@@ -281,7 +284,7 @@ func (c *Client) GetUser(ctx context.Context, realm, clientID, clientSecret, use
 	)
 	defer span.End()
 
-	if err := c.ensureAdminToken(ctx); err != nil {
+	if err := c.ensureAdminToken(ctx, realm, clientID, clientSecret); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to ensure admin token")
 		return nil, err
@@ -418,22 +421,22 @@ func (c *Client) IntrospectToken(ctx context.Context, token string) (*TokenIntro
 }
 
 // DeleteUser deletes a user by ID
-func (c *Client) DeleteUser(ctx context.Context, userID string) error {
+func (c *Client) DeleteUser(ctx context.Context, realm, clientID, clientSecret, userID string) error {
 	ctx, span := c.tracer.Start(ctx, "keycloak.user.delete",
 		trace.WithAttributes(
-			attribute.String("keycloak.realm", c.config.Realm),
+			attribute.String("keycloak.realm", realm),
 			attribute.String("keycloak.user.id", userID),
 		),
 	)
 	defer span.End()
 
-	if err := c.ensureAdminToken(ctx); err != nil {
+	if err := c.ensureAdminToken(ctx, realm, clientID, clientSecret); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to ensure admin token")
 		return err
 	}
 
-	userURL := fmt.Sprintf("%s/admin/realms/%s/users/%s", c.baseURL, c.config.Realm, userID)
+	userURL := fmt.Sprintf("%s/admin/realms/%s/users/%s", c.baseURL, realm, userID)
 
 	req, err := http.NewRequestWithContext(ctx, "DELETE", userURL, nil)
 	if err != nil {
@@ -474,10 +477,10 @@ func (c *Client) DeleteUser(ctx context.Context, userID string) error {
 }
 
 // ListUsers lists users with pagination and search
-func (c *Client) ListUsers(ctx context.Context, page, pageSize int, search, email, username string) ([]*User, int, error) {
+func (c *Client) ListUsers(ctx context.Context, realm, clientID, clientSecret string, page, pageSize int, search, email, username string) ([]*User, int, error) {
 	ctx, span := c.tracer.Start(ctx, "keycloak.user.list",
 		trace.WithAttributes(
-			attribute.String("keycloak.realm", c.config.Realm),
+			attribute.String("keycloak.realm", realm),
 			attribute.Int("page", page),
 			attribute.Int("page_size", pageSize),
 			attribute.String("search", search),
@@ -485,7 +488,7 @@ func (c *Client) ListUsers(ctx context.Context, page, pageSize int, search, emai
 	)
 	defer span.End()
 
-	if err := c.ensureAdminToken(ctx); err != nil {
+	if err := c.ensureAdminToken(ctx, realm, clientID, clientSecret); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to ensure admin token")
 		return nil, 0, err
@@ -897,7 +900,7 @@ func (c *Client) Register(ctx context.Context, realm, clientID, clientSecret, us
 		attribute.Bool("keycloak.email_verified", emailVerified),
 	)
 
-	if err := c.ensureAdminToken(ctx); err != nil {
+	if err := c.ensureAdminToken(ctx, realm, clientID, clientSecret); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to get admin token")
 		return nil, fmt.Errorf("failed to get admin token: %w", err)
@@ -933,17 +936,18 @@ func (c *Client) Register(ctx context.Context, realm, clientID, clientSecret, us
 }
 
 // ResetPassword initiates a password reset for a user
-func (c *Client) ResetPassword(ctx context.Context, username, email, clientID, clientSecret, redirectURI string) error {
+func (c *Client) ResetPassword(ctx context.Context, realm, username, email, clientID, clientSecret, redirectURI string) error {
 	ctx, span := c.tracer.Start(ctx, "keycloak.reset_password")
 	defer span.End()
 
 	span.SetAttributes(
+		attribute.String("keycloak.realm", realm),
 		attribute.String("keycloak.username", username),
 		attribute.String("keycloak.email", email),
 		attribute.String("keycloak.client_id", clientID),
 	)
 
-	if err := c.ensureAdminToken(ctx); err != nil {
+	if err := c.ensureAdminToken(ctx, realm, clientID, clientSecret); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to get admin token")
 		return fmt.Errorf("failed to get admin token: %w", err)
@@ -952,7 +956,7 @@ func (c *Client) ResetPassword(ctx context.Context, username, email, clientID, c
 	// First, find the user by username or email
 	var userID string
 	if username != "" {
-		users, _, err := c.ListUsers(ctx, 0, 1, "", "", username)
+		users, _, err := c.ListUsers(ctx, realm, clientID, clientSecret, 0, 1, "", "", username)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "failed to find user by username")
@@ -964,7 +968,7 @@ func (c *Client) ResetPassword(ctx context.Context, username, email, clientID, c
 		}
 		userID = users[0].ID
 	} else if email != "" {
-		users, _, err := c.ListUsers(ctx, 0, 1, "", email, "")
+		users, _, err := c.ListUsers(ctx, realm, clientID, clientSecret, 0, 1, "", email, "")
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "failed to find user by email")
