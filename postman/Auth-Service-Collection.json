@@ -7,6 +7,99 @@
 	},
 	"item": [
 		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"realm_name\": \"{{keycloak_realm}}\",\n    \"username\": \"{{keycloak_admin_username}}\",\n    \"password\": \"{{keycloak_admin_password}}\",\n    \"client_id\": \"{{keycloak_client_id}}\",\n    \"client_secret\": \"{{keycloak_client_secret}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "login"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"realm_name\": \"{{keycloak_realm}}\",\n    \"refresh_token\": \"{{refresh_token}}\",\n    \"client_id\": \"{{keycloak_client_id}}\",\n    \"client_secret\": \"{{keycloak_client_secret}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/logout",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "logout"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Register",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"realm_name\": \"{{keycloak_realm}}\",\n    \"client_id\": \"{{keycloak_client_id}}\",\n    \"client_secret\": \"{{keycloak_client_secret}}\",\n    \"username\": \"newuser\",\n    \"email\": \"newuser@example.com\",\n    \"first_name\": \"New\",\n    \"last_name\": \"User\",\n    \"password\": \"password123\",\n    \"email_verified\": false,\n    \"attributes\": {\n        \"department\": \"IT\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "register"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Reset Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"realm_name\": \"{{keycloak_realm}}\",\n    \"username\": \"{{keycloak_admin_username}}\",\n    \"email\": \"admin@example.com\",\n    \"client_id\": \"{{keycloak_client_id}}\",\n    \"client_secret\": \"{{keycloak_client_secret}}\",\n    \"redirect_uri\": \"http://localhost:8080/auth/reset-password-complete\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/reset-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "reset-password"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "Health & Monitoring",
 			"item": [
 				{
@@ -125,7 +218,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"email\": \"{{test_email}}\",\n    \"first_name\": \"Test\",\n    \"last_name\": \"User\",\n    \"enabled\": true,\n    \"email_verified\": false,\n    \"attributes\": {\n        \"department\": \"engineering\",\n        \"role\": \"developer\"\n    },\n    \"credentials\": [\n        {\n            \"type\": \"password\",\n            \"value\": \"TestPassword123!\",\n            \"temporary\": false\n        }\n    ]\n}"
+							"raw": "{\n    \"realm_name\": \"{{keycloak_realm}}\",\n    \"client_id\": \"{{keycloak_client_id}}\",\n    \"client_secret\": \"{{keycloak_client_secret}}\",\n    \"username\": \"{{test_username}}\",\n    \"email\": \"{{test_email}}\",\n    \"first_name\": \"Test\",\n    \"last_name\": \"User\",\n    \"enabled\": true,\n    \"email_verified\": false,\n    \"attributes\": {\n        \"department\": \"engineering\",\n        \"role\": \"developer\"\n    },\n    \"credentials\": [\n        {\n            \"type\": \"password\",\n            \"value\": \"TestPassword123!\",\n            \"temporary\": false\n        }\n    ]\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/users",
@@ -155,7 +248,20 @@
 					],
 					"request": {
 						"method": "GET",
-						"header": [],
+						"header": [
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id", 
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
+							}
+						],
 						"url": {
 							"raw": "{{base_url}}/api/v1/users/{{created_user_id}}",
 							"host": ["{{base_url}}"],

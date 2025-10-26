@@ -81,6 +81,7 @@ func (s *GRPCServer) CreateUser(ctx context.Context, req *keycloakv1.CreateUserR
 	ctx, span := s.tracer.Start(ctx, "grpc.CreateUser",
 		trace.WithAttributes(
 			attribute.String("grpc.method", "CreateUser"),
+			attribute.String("keycloak.realm", req.RealmName),
 			attribute.String("keycloak.user.username", req.Username),
 			attribute.String("keycloak.user.email", req.Email),
 		),
@@ -88,11 +89,22 @@ func (s *GRPCServer) CreateUser(ctx context.Context, req *keycloakv1.CreateUserR
 	defer span.End()
 
 	// Validate request
+	if req.RealmName == "" {
+		span.SetStatus(otelcodes.Error, "realm_name is required")
+		return nil, status.Error(codes.InvalidArgument, "realm_name is required")
+	}
+	if req.ClientId == "" {
+		span.SetStatus(otelcodes.Error, "client_id is required")
+		return nil, status.Error(codes.InvalidArgument, "client_id is required")
+	}
+	if req.ClientSecret == "" {
+		span.SetStatus(otelcodes.Error, "client_secret is required")
+		return nil, status.Error(codes.InvalidArgument, "client_secret is required")
+	}
 	if req.Username == "" {
 		span.SetStatus(otelcodes.Error, "username is required")
 		return nil, status.Error(codes.InvalidArgument, "username is required")
 	}
-
 	if req.Email == "" {
 		span.SetStatus(otelcodes.Error, "email is required")
 		return nil, status.Error(codes.InvalidArgument, "email is required")
@@ -118,7 +130,7 @@ func (s *GRPCServer) CreateUser(ctx context.Context, req *keycloakv1.CreateUserR
 	}
 
 	// Create user in Keycloak
-	createdUser, err := s.keycloakClient.CreateUser(ctx, kcUser)
+	createdUser, err := s.keycloakClient.CreateUser(ctx, req.RealmName, req.ClientId, req.ClientSecret, kcUser)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(otelcodes.Error, "failed to create user")
@@ -151,11 +163,25 @@ func (s *GRPCServer) GetUser(ctx context.Context, req *keycloakv1.GetUserRequest
 	ctx, span := s.tracer.Start(ctx, "grpc.GetUser",
 		trace.WithAttributes(
 			attribute.String("grpc.method", "GetUser"),
+			attribute.String("keycloak.realm", req.RealmName),
 			attribute.String("keycloak.user.id", req.UserId),
 		),
 	)
 	defer span.End()
 
+	// Validate request
+	if req.RealmName == "" {
+		span.SetStatus(otelcodes.Error, "realm_name is required")
+		return nil, status.Error(codes.InvalidArgument, "realm_name is required")
+	}
+	if req.ClientId == "" {
+		span.SetStatus(otelcodes.Error, "client_id is required")
+		return nil, status.Error(codes.InvalidArgument, "client_id is required")
+	}
+	if req.ClientSecret == "" {
+		span.SetStatus(otelcodes.Error, "client_secret is required")
+		return nil, status.Error(codes.InvalidArgument, "client_secret is required")
+	}
 	if req.UserId == "" {
 		span.SetStatus(otelcodes.Error, "user ID is required")
 		return nil, status.Error(codes.InvalidArgument, "user ID is required")
@@ -175,7 +201,7 @@ func (s *GRPCServer) GetUser(ctx context.Context, req *keycloakv1.GetUserRequest
 	}
 
 	// Get user from Keycloak
-	kcUser, err := s.keycloakClient.GetUser(ctx, req.UserId)
+	kcUser, err := s.keycloakClient.GetUser(ctx, req.RealmName, req.ClientId, req.ClientSecret, req.UserId)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(otelcodes.Error, "failed to get user")
@@ -218,7 +244,7 @@ func (s *GRPCServer) UpdateUser(ctx context.Context, req *keycloakv1.UpdateUserR
 	}
 
 	// First get the existing user
-	existingUser, err := s.keycloakClient.GetUser(ctx, req.UserId)
+	existingUser, err := s.keycloakClient.GetUser(ctx, req.RealmName, req.ClientId, req.ClientSecret, req.UserId)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(otelcodes.Error, "failed to get existing user")
@@ -423,13 +449,204 @@ func (s *GRPCServer) RefreshToken(ctx context.Context, req *keycloakv1.RefreshTo
 	span.SetStatus(otelcodes.Ok, "token refreshed successfully")
 
 	return &keycloakv1.RefreshTokenResponse{
-		AccessToken:       tokenResponse.AccessToken,
-		RefreshToken:      tokenResponse.RefreshToken,
-		TokenType:         tokenResponse.TokenType,
-		ExpiresIn:         int32(tokenResponse.ExpiresIn),
-		RefreshExpiresIn:  int32(tokenResponse.RefreshExpiresIn),
-		Scope:             tokenResponse.Scope,
+		AccessToken:      tokenResponse.AccessToken,
+		RefreshToken:     tokenResponse.RefreshToken,
+		TokenType:        tokenResponse.TokenType,
+		ExpiresIn:        int32(tokenResponse.ExpiresIn),
+		RefreshExpiresIn: int32(tokenResponse.RefreshExpiresIn),
+		Scope:            tokenResponse.Scope,
 	}, nil
+}
+
+// Login authenticates a user and returns tokens
+func (s *GRPCServer) Login(ctx context.Context, req *keycloakv1.LoginRequest) (*keycloakv1.LoginResponse, error) {
+	ctx, span := s.tracer.Start(ctx, "grpc.login",
+		trace.WithAttributes(
+			attribute.String("username", req.Username),
+			attribute.String("client_id", req.ClientId),
+		),
+	)
+	defer span.End()
+
+	// Validate required fields
+	if req.Username == "" || req.Password == "" {
+		span.SetStatus(otelcodes.Error, "missing required fields")
+		return nil, status.Error(codes.InvalidArgument, "username and password are required")
+	}
+
+	// Use default client if not provided
+	clientID := req.ClientId
+	if clientID == "" {
+		clientID = s.config.Keycloak.ClientID
+	}
+
+	clientSecret := req.ClientSecret
+	if clientSecret == "" {
+		clientSecret = s.config.Keycloak.ClientSecret
+	}
+
+	// Perform login
+	tokenResponse, user, err := s.keycloakClient.Login(ctx, req.RealmName, req.Username, req.Password, clientID, clientSecret, req.Scope)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(otelcodes.Error, "login failed")
+		return nil, status.Errorf(codes.Unauthenticated, "login failed: %v", err)
+	}
+
+	span.SetAttributes(
+		attribute.String("user_id", user.ID),
+		attribute.String("token_type", tokenResponse.TokenType),
+	)
+	span.SetStatus(otelcodes.Ok, "login successful")
+
+	return &keycloakv1.LoginResponse{
+		AccessToken:      tokenResponse.AccessToken,
+		RefreshToken:     tokenResponse.RefreshToken,
+		TokenType:        tokenResponse.TokenType,
+		ExpiresIn:        int32(tokenResponse.ExpiresIn),
+		RefreshExpiresIn: int32(tokenResponse.RefreshExpiresIn),
+		Scope:            tokenResponse.Scope,
+		User:             convertKeycloakUserToProto(user),
+	}, nil
+}
+
+// Logout revokes the refresh token
+func (s *GRPCServer) Logout(ctx context.Context, req *keycloakv1.LogoutRequest) (*emptypb.Empty, error) {
+	ctx, span := s.tracer.Start(ctx, "grpc.logout",
+		trace.WithAttributes(
+			attribute.String("client_id", req.ClientId),
+		),
+	)
+	defer span.End()
+
+	// Validate required fields
+	if req.RefreshToken == "" {
+		span.SetStatus(otelcodes.Error, "missing refresh token")
+		return nil, status.Error(codes.InvalidArgument, "refresh_token is required")
+	}
+
+	// Use default client if not provided
+	clientID := req.ClientId
+	if clientID == "" {
+		clientID = s.config.Keycloak.ClientID
+	}
+
+	clientSecret := req.ClientSecret
+	if clientSecret == "" {
+		clientSecret = s.config.Keycloak.ClientSecret
+	}
+
+	// Perform logout
+	err := s.keycloakClient.Logout(ctx, req.RealmName, req.RefreshToken, clientID, clientSecret)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(otelcodes.Error, "logout failed")
+		return nil, status.Errorf(codes.Internal, "logout failed: %v", err)
+	}
+
+	span.SetStatus(otelcodes.Ok, "logout successful")
+	return &emptypb.Empty{}, nil
+}
+
+// Register creates a new user account
+func (s *GRPCServer) Register(ctx context.Context, req *keycloakv1.RegisterRequest) (*keycloakv1.RegisterResponse, error) {
+	ctx, span := s.tracer.Start(ctx, "grpc.Register",
+		trace.WithAttributes(
+			attribute.String("grpc.method", "Register"),
+			attribute.String("keycloak.user.username", req.Username),
+			attribute.String("keycloak.user.email", req.Email),
+		),
+	)
+	defer span.End()
+
+	// Validate required fields
+	if req.Username == "" {
+		span.SetStatus(otelcodes.Error, "username is required")
+		return nil, status.Error(codes.InvalidArgument, "username is required")
+	}
+	if req.Email == "" {
+		span.SetStatus(otelcodes.Error, "email is required")
+		return nil, status.Error(codes.InvalidArgument, "email is required")
+	}
+	if req.Password == "" {
+		span.SetStatus(otelcodes.Error, "password is required")
+		return nil, status.Error(codes.InvalidArgument, "password is required")
+	}
+
+	// Convert attributes from map[string]string to map[string]interface{}
+	var attributes map[string]interface{}
+	if req.Attributes != nil {
+		attributes = make(map[string]interface{})
+		for k, v := range req.Attributes {
+			attributes[k] = v
+		}
+	}
+
+	// Register user via Keycloak client
+	user, err := s.keycloakClient.Register(ctx, req.RealmName, req.ClientId, req.ClientSecret, req.Username, req.Email, req.FirstName, req.LastName, req.Password, req.EmailVerified, attributes)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(otelcodes.Error, "failed to register user")
+		return nil, status.Errorf(codes.Internal, "registration failed: %v", err)
+	}
+
+	span.SetStatus(otelcodes.Ok, "user registered successfully")
+
+	return &keycloakv1.RegisterResponse{
+		UserId:           user.ID,
+		Username:         user.Username,
+		Email:            user.Email,
+		FirstName:        user.FirstName,
+		LastName:         user.LastName,
+		Enabled:          user.Enabled,
+		EmailVerified:    user.EmailVerified,
+		CreatedTimestamp: timestamppb.New(time.Unix(user.CreatedTimestamp/1000, 0)),
+	}, nil
+}
+
+// ResetPassword initiates a password reset for a user
+func (s *GRPCServer) ResetPassword(ctx context.Context, req *keycloakv1.ResetPasswordRequest) (*emptypb.Empty, error) {
+	ctx, span := s.tracer.Start(ctx, "grpc.ResetPassword",
+		trace.WithAttributes(
+			attribute.String("grpc.method", "ResetPassword"),
+			attribute.String("keycloak.user.username", req.Username),
+			attribute.String("keycloak.user.email", req.Email),
+		),
+	)
+	defer span.End()
+
+	// Validate that either username or email is provided
+	if req.Username == "" && req.Email == "" {
+		span.SetStatus(otelcodes.Error, "username or email is required")
+		return nil, status.Error(codes.InvalidArgument, "username or email is required")
+	}
+
+	// Use default client credentials if not provided
+	clientID := req.ClientId
+	clientSecret := req.ClientSecret
+	if clientID == "" {
+		clientID = s.config.Keycloak.ClientID
+	}
+	if clientSecret == "" {
+		clientSecret = s.config.Keycloak.ClientSecret
+	}
+
+	// Set default redirect URI if not provided
+	redirectURI := req.RedirectUri
+	if redirectURI == "" {
+		redirectURI = "http://localhost:8080/auth/reset-password-complete"
+	}
+
+	// Initiate password reset via Keycloak client
+	err := s.keycloakClient.ResetPassword(ctx, req.Username, req.Email, clientID, clientSecret, redirectURI)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(otelcodes.Error, "failed to reset password")
+		return nil, status.Errorf(codes.Internal, "password reset failed: %v", err)
+	}
+
+	span.SetStatus(otelcodes.Ok, "password reset initiated successfully")
+	return &emptypb.Empty{}, nil
 }
 
 // HealthCheck performs a health check

@@ -260,6 +260,12 @@ func createHTTPRouter(cfg *config.Config, grpcPort int, healthService *health.He
 	// API routes that proxy to gRPC
 	api := router.Group("/api/v1")
 	{
+		// Authentication endpoints
+		api.POST("/auth/login", loginHandler(grpcPort))
+		api.POST("/auth/logout", logoutHandler(grpcPort))
+		api.POST("/auth/register", registerHandler(grpcPort))
+		api.POST("/auth/reset-password", resetPasswordHandler(grpcPort))
+
 		// User management endpoints
 		api.POST("/users", createUserHandler(grpcPort))
 		api.GET("/users/:id", getUserHandler(grpcPort))
@@ -324,8 +330,24 @@ func getUserHandler(grpcPort int) gin.HandlerFunc {
 		}
 		defer conn.Close()
 
+		// Extract realm and client parameters from headers
+		realmName := c.GetHeader("X-Realm-Name")
+		clientID := c.GetHeader("X-Client-Id")
+		clientSecret := c.GetHeader("X-Client-Secret")
 		userID := c.Param("id")
-		req := &keycloakv1.GetUserRequest{UserId: userID}
+
+		// Validate required parameters
+		if realmName == "" || clientID == "" || clientSecret == "" {
+			c.JSON(400, gin.H{"error": "X-Realm-Name, X-Client-Id, and X-Client-Secret headers are required"})
+			return
+		}
+
+		req := &keycloakv1.GetUserRequest{
+			RealmName:    realmName,
+			ClientId:     clientID,
+			ClientSecret: clientSecret,
+			UserId:       userID,
+		}
 
 		resp, err := client.GetUser(c.Request.Context(), req)
 		if err != nil {
@@ -465,6 +487,106 @@ func refreshTokenHandler(grpcPort int) gin.HandlerFunc {
 		}
 
 		c.JSON(200, resp)
+	}
+}
+
+func loginHandler(grpcPort int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		client, conn, err := createGRPCClient(grpcPort)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "Failed to connect to gRPC server"})
+			return
+		}
+		defer conn.Close()
+
+		var req keycloakv1.LoginRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		resp, err := client.Login(c.Request.Context(), &req)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, resp)
+	}
+}
+
+func logoutHandler(grpcPort int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		client, conn, err := createGRPCClient(grpcPort)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "Failed to connect to gRPC server"})
+			return
+		}
+		defer conn.Close()
+
+		var req keycloakv1.LogoutRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		_, err = client.Logout(c.Request.Context(), &req)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{"message": "Successfully logged out"})
+	}
+}
+
+func registerHandler(grpcPort int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		client, conn, err := createGRPCClient(grpcPort)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "Failed to connect to gRPC server"})
+			return
+		}
+		defer conn.Close()
+
+		var req keycloakv1.RegisterRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		resp, err := client.Register(c.Request.Context(), &req)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, resp)
+	}
+}
+
+func resetPasswordHandler(grpcPort int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		client, conn, err := createGRPCClient(grpcPort)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "Failed to connect to gRPC server"})
+			return
+		}
+		defer conn.Close()
+
+		var req keycloakv1.ResetPasswordRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		_, err = client.ResetPassword(c.Request.Context(), &req)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{"message": "Password reset email sent successfully"})
 	}
 }
 

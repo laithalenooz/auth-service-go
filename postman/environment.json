@@ -22,7 +22,7 @@
 		},
 		{
 			"key": "keycloak_client_secret",
-			"value": "your-client-secret-here",
+			"value": "hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK",
 			"type": "secret",
 			"enabled": true
 		},
@@ -30,6 +30,18 @@
 			"key": "keycloak_realm",
 			"value": "master",
 			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "keycloak_admin_username",
+			"value": "admin",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "keycloak_admin_password",
+			"value": "admin",
+			"type": "secret",
 			"enabled": true
 		},
 		{

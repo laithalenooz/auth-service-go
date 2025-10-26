@@ -179,11 +179,11 @@ func (c *Client) acquireAdminToken(ctx context.Context) error {
 }
 
 // CreateUser creates a new user in Keycloak
-func (c *Client) CreateUser(ctx context.Context, user *User) (*User, error) {
+func (c *Client) CreateUser(ctx context.Context, realm, clientID, clientSecret string, user *User) (*User, error) {
 	start := time.Now()
 	ctx, span := c.tracer.Start(ctx, "keycloak.user.create",
 		trace.WithAttributes(
-			attribute.String("keycloak.realm", c.config.Realm),
+			attribute.String("keycloak.realm", realm),
 			attribute.String("keycloak.user.username", user.Username),
 			attribute.String("keycloak.user.email", user.Email),
 		),
@@ -197,7 +197,7 @@ func (c *Client) CreateUser(ctx context.Context, user *User) (*User, error) {
 		return nil, err
 	}
 
-	userURL := fmt.Sprintf("%s/admin/realms/%s/users", c.baseURL, c.config.Realm)
+	userURL := fmt.Sprintf("%s/admin/realms/%s/users", c.baseURL, realm)
 
 	userJSON, err := json.Marshal(user)
 	if err != nil {
@@ -272,10 +272,10 @@ func (c *Client) CreateUser(ctx context.Context, user *User) (*User, error) {
 }
 
 // GetUser retrieves a user by ID
-func (c *Client) GetUser(ctx context.Context, userID string) (*User, error) {
+func (c *Client) GetUser(ctx context.Context, realm, clientID, clientSecret, userID string) (*User, error) {
 	ctx, span := c.tracer.Start(ctx, "keycloak.user.get",
 		trace.WithAttributes(
-			attribute.String("keycloak.realm", c.config.Realm),
+			attribute.String("keycloak.realm", realm),
 			attribute.String("keycloak.user.id", userID),
 		),
 	)
@@ -287,7 +287,7 @@ func (c *Client) GetUser(ctx context.Context, userID string) (*User, error) {
 		return nil, err
 	}
 
-	userURL := fmt.Sprintf("%s/admin/realms/%s/users/%s", c.baseURL, c.config.Realm, userID)
+	userURL := fmt.Sprintf("%s/admin/realms/%s/users/%s", c.baseURL, realm, userID)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", userURL, nil)
 	if err != nil {
@@ -685,6 +685,196 @@ func (c *Client) RefreshToken(ctx context.Context, refreshToken, clientID, clien
 	return &tokenResponse, nil
 }
 
+// Login authenticates a user and returns tokens
+func (c *Client) Login(ctx context.Context, realm, username, password, clientID, clientSecret string, scopes []string) (*TokenResponse, *User, error) {
+	ctx, span := c.tracer.Start(ctx, "keycloak.user.login",
+		trace.WithAttributes(
+			attribute.String("keycloak.realm", realm),
+			attribute.String("keycloak.client_id", clientID),
+			attribute.String("keycloak.username", username),
+		),
+	)
+	defer span.End()
+
+	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", c.baseURL, realm)
+
+	data := url.Values{}
+	data.Set("grant_type", "password")
+	data.Set("username", username)
+	data.Set("password", password)
+	data.Set("client_id", clientID)
+	if clientSecret != "" {
+		data.Set("client_secret", clientSecret)
+	}
+	if len(scopes) > 0 {
+		data.Set("scope", strings.Join(scopes, " "))
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create request")
+		return nil, nil, fmt.Errorf("failed to create login request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "request failed")
+		return nil, nil, fmt.Errorf("failed to login: %w", err)
+	}
+	defer resp.Body.Close()
+
+	span.SetAttributes(
+		attribute.Int("http.status_code", resp.StatusCode),
+		attribute.String("http.method", "POST"),
+		attribute.String("http.url", tokenURL),
+	)
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		return nil, nil, fmt.Errorf("failed to login: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var tokenResponse TokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to decode response")
+		return nil, nil, fmt.Errorf("failed to decode token response: %w", err)
+	}
+
+	// Get user info using the access token
+	user, err := c.getUserInfo(ctx, tokenResponse.AccessToken)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get user info")
+		// Don't fail the login if we can't get user info, just log the error
+		user = &User{Username: username}
+	}
+
+	span.SetAttributes(
+		attribute.String("keycloak.token.type", tokenResponse.TokenType),
+		attribute.Int("keycloak.token.expires_in", tokenResponse.ExpiresIn),
+	)
+	span.SetStatus(codes.Ok, "login successful")
+
+	return &tokenResponse, user, nil
+}
+
+// Logout revokes the refresh token
+func (c *Client) Logout(ctx context.Context, realm, refreshToken, clientID, clientSecret string) error {
+	ctx, span := c.tracer.Start(ctx, "keycloak.user.logout",
+		trace.WithAttributes(
+			attribute.String("keycloak.realm", realm),
+			attribute.String("keycloak.client_id", clientID),
+		),
+	)
+	defer span.End()
+
+	logoutURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/logout", c.baseURL, realm)
+
+	data := url.Values{}
+	data.Set("refresh_token", refreshToken)
+	data.Set("client_id", clientID)
+	if clientSecret != "" {
+		data.Set("client_secret", clientSecret)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", logoutURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create request")
+		return fmt.Errorf("failed to create logout request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "request failed")
+		return fmt.Errorf("failed to logout: %w", err)
+	}
+	defer resp.Body.Close()
+
+	span.SetAttributes(
+		attribute.Int("http.status_code", resp.StatusCode),
+		attribute.String("http.method", "POST"),
+		attribute.String("http.url", logoutURL),
+	)
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		return fmt.Errorf("failed to logout: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	span.SetStatus(codes.Ok, "logout successful")
+	return nil
+}
+
+// getUserInfo retrieves user information using an access token
+func (c *Client) getUserInfo(ctx context.Context, accessToken string) (*User, error) {
+	ctx, span := c.tracer.Start(ctx, "keycloak.user.info")
+	defer span.End()
+
+	userInfoURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/userinfo", c.baseURL, c.config.Realm)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", userInfoURL, nil)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create request")
+		return nil, fmt.Errorf("failed to create userinfo request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "request failed")
+		return nil, fmt.Errorf("failed to get user info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		return nil, fmt.Errorf("failed to get user info: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var userInfo struct {
+		Sub               string `json:"sub"`
+		PreferredUsername string `json:"preferred_username"`
+		Email             string `json:"email"`
+		EmailVerified     bool   `json:"email_verified"`
+		GivenName         string `json:"given_name"`
+		FamilyName        string `json:"family_name"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to decode response")
+		return nil, fmt.Errorf("failed to decode user info: %w", err)
+	}
+
+	user := &User{
+		ID:            userInfo.Sub,
+		Username:      userInfo.PreferredUsername,
+		Email:         userInfo.Email,
+		EmailVerified: userInfo.EmailVerified,
+		FirstName:     userInfo.GivenName,
+		LastName:      userInfo.FamilyName,
+		Enabled:       true,
+	}
+
+	span.SetStatus(codes.Ok, "user info retrieved successfully")
+	return user, nil
+}
+
 // TokenResponse represents the token refresh response
 type TokenResponse struct {
 	AccessToken      string `json:"access_token"`
@@ -693,4 +883,150 @@ type TokenResponse struct {
 	ExpiresIn        int    `json:"expires_in"`
 	RefreshExpiresIn int    `json:"refresh_expires_in"`
 	Scope            string `json:"scope"`
+}
+
+// Register creates a new user account in Keycloak
+func (c *Client) Register(ctx context.Context, realm, clientID, clientSecret, username, email, firstName, lastName, password string, emailVerified bool, attributes map[string]interface{}) (*User, error) {
+	ctx, span := c.tracer.Start(ctx, "keycloak.register")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("keycloak.realm", realm),
+		attribute.String("keycloak.username", username),
+		attribute.String("keycloak.email", email),
+		attribute.Bool("keycloak.email_verified", emailVerified),
+	)
+
+	if err := c.ensureAdminToken(ctx); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get admin token")
+		return nil, fmt.Errorf("failed to get admin token: %w", err)
+	}
+
+	user := &User{
+		Username:      username,
+		Email:         email,
+		FirstName:     firstName,
+		LastName:      lastName,
+		Enabled:       true,
+		EmailVerified: emailVerified,
+		Attributes:    attributes,
+		Credentials: []Credential{
+			{
+				Type:      "password",
+				Value:     password,
+				Temporary: false,
+			},
+		},
+	}
+
+	// Create the user using the existing CreateUser method
+	createdUser, err := c.CreateUser(ctx, realm, clientID, clientSecret, user)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create user")
+		return nil, fmt.Errorf("failed to register user: %w", err)
+	}
+
+	span.SetStatus(codes.Ok, "user registered successfully")
+	return createdUser, nil
+}
+
+// ResetPassword initiates a password reset for a user
+func (c *Client) ResetPassword(ctx context.Context, username, email, clientID, clientSecret, redirectURI string) error {
+	ctx, span := c.tracer.Start(ctx, "keycloak.reset_password")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("keycloak.username", username),
+		attribute.String("keycloak.email", email),
+		attribute.String("keycloak.client_id", clientID),
+	)
+
+	if err := c.ensureAdminToken(ctx); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get admin token")
+		return fmt.Errorf("failed to get admin token: %w", err)
+	}
+
+	// First, find the user by username or email
+	var userID string
+	if username != "" {
+		users, _, err := c.ListUsers(ctx, 0, 1, "", "", username)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to find user by username")
+			return fmt.Errorf("failed to find user by username: %w", err)
+		}
+		if len(users) == 0 {
+			span.SetStatus(codes.Error, "user not found")
+			return fmt.Errorf("user not found with username: %s", username)
+		}
+		userID = users[0].ID
+	} else if email != "" {
+		users, _, err := c.ListUsers(ctx, 0, 1, "", email, "")
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to find user by email")
+			return fmt.Errorf("failed to find user by email: %w", err)
+		}
+		if len(users) == 0 {
+			span.SetStatus(codes.Error, "user not found")
+			return fmt.Errorf("user not found with email: %s", email)
+		}
+		userID = users[0].ID
+	} else {
+		span.SetStatus(codes.Error, "username or email required")
+		return fmt.Errorf("username or email is required for password reset")
+	}
+
+	// Send password reset email using Keycloak Admin API
+	resetURL := fmt.Sprintf("%s/admin/realms/%s/users/%s/execute-actions-email", c.baseURL, c.config.Realm, userID)
+
+	actions := []string{"UPDATE_PASSWORD"}
+	reqBody := map[string]interface{}{
+		"actions":     actions,
+		"client_id":   clientID,
+		"redirect_uri": redirectURI,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to marshal request")
+		return fmt.Errorf("failed to marshal reset password request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "PUT", resetURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create request")
+		return fmt.Errorf("failed to create reset password request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.adminToken.AccessToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "request failed")
+		return fmt.Errorf("failed to send reset password request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	span.SetAttributes(
+		attribute.Int("http.status_code", resp.StatusCode),
+		attribute.String("http.method", "PUT"),
+		attribute.String("http.url", resetURL),
+	)
+
+	if resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		return fmt.Errorf("failed to reset password: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	span.SetStatus(codes.Ok, "password reset email sent")
+	return nil
 }
