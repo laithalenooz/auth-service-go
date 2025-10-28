@@ -56,7 +56,13 @@ clean: ## Clean build artifacts
 
 # Docker
 docker-build: ## Build Docker image
-	docker build -t auth-service-go .
+	docker build -t auth-service-go:latest .
+
+docker-build-prod: ## Build production Docker image with version tag
+	docker build -t auth-service-go:$(shell git rev-parse --short HEAD) -t auth-service-go:latest .
+
+docker-run: ## Run Docker container locally
+	docker run --rm -p 8080:8080 -p 8081:8081 --name auth-service auth-service-go:latest
 
 docker-up: ## Start development environment
 	docker-compose up -d
@@ -66,6 +72,31 @@ docker-down: ## Stop development environment
 
 docker-logs: ## Show logs from development environment
 	docker-compose logs -f
+
+docker-clean: ## Clean Docker images and containers
+	docker system prune -f
+	docker rmi auth-service-go:latest 2>/dev/null || true
+
+# Production Docker commands
+docker-up-prod: ## Start production environment
+	docker-compose -f docker-compose.prod.yml up -d
+
+docker-down-prod: ## Stop production environment
+	docker-compose -f docker-compose.prod.yml down
+
+docker-logs-prod: ## Show logs from production environment
+	docker-compose -f docker-compose.prod.yml logs -f
+
+# Complete deployment commands
+deploy-dev: docker-build docker-up ## Build and deploy development environment
+
+deploy-prod: docker-build-prod docker-up-prod ## Build and deploy production environment
+
+# Build without Docker (requires local Go and buf installation)
+build-local: proto ## Build application locally (requires Go and buf)
+	CGO_ENABLED=0 go build -ldflags='-w -s' -o bin/auth-service ./cmd/server
+
+build-local-with-tools: install-tools build-local ## Install tools and build locally
 
 # Tools installation
 install-tools: ## Install development tools

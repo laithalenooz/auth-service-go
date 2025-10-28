@@ -209,7 +209,7 @@ func (s *GRPCServer) VerifyToken(ctx context.Context, req *keycloakv1.VerifyToke
 		Exp:       introspection.Exp,
 		Iat:       introspection.Iat,
 		Sub:       introspection.Sub,
-		Aud:       introspection.Aud,
+		Aud:       introspection.Aud.String(),
 		Iss:       introspection.Iss,
 		Scope:     scopes,
 	}, nil
@@ -787,7 +787,7 @@ func convertTokenIntrospectionToProto(introspection *keycloak.TokenIntrospection
 		Exp:       introspection.Exp,
 		Iat:       introspection.Iat,
 		Sub:       introspection.Sub,
-		Aud:       introspection.Aud,
+		Aud:       introspection.Aud.String(),
 		Iss:       introspection.Iss,
 		Scope:     []string{introspection.Scope},
 	}

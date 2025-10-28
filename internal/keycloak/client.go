@@ -69,18 +69,48 @@ type Credential struct {
 	Temporary bool   `json:"temporary"`
 }
 
+// AudienceField handles both string and array audience values
+type AudienceField []string
+
+// UnmarshalJSON implements custom unmarshaling for audience field
+func (a *AudienceField) UnmarshalJSON(data []byte) error {
+	// Try to unmarshal as array first
+	var arr []string
+	if err := json.Unmarshal(data, &arr); err == nil {
+		*a = AudienceField(arr)
+		return nil
+	}
+	
+	// If that fails, try as string
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		*a = AudienceField([]string{str})
+		return nil
+	}
+	
+	return fmt.Errorf("audience field must be string or array of strings")
+}
+
+// String returns the first audience value or empty string
+func (a AudienceField) String() string {
+	if len(a) > 0 {
+		return a[0]
+	}
+	return ""
+}
+
 // TokenIntrospection represents token introspection response
 type TokenIntrospection struct {
-	Active    bool   `json:"active"`
-	ClientID  string `json:"client_id,omitempty"`
-	Username  string `json:"username,omitempty"`
-	TokenType string `json:"token_type,omitempty"`
-	Exp       int64  `json:"exp,omitempty"`
-	Iat       int64  `json:"iat,omitempty"`
-	Sub       string `json:"sub,omitempty"`
-	Aud       string `json:"aud,omitempty"`
-	Iss       string `json:"iss,omitempty"`
-	Scope     string `json:"scope,omitempty"`
+	Active    bool          `json:"active"`
+	ClientID  string        `json:"client_id,omitempty"`
+	Username  string        `json:"username,omitempty"`
+	TokenType string        `json:"token_type,omitempty"`
+	Exp       int64         `json:"exp,omitempty"`
+	Iat       int64         `json:"iat,omitempty"`
+	Sub       string        `json:"sub,omitempty"`
+	Aud       AudienceField `json:"aud,omitempty"`
+	Iss       string        `json:"iss,omitempty"`
+	Scope     string        `json:"scope,omitempty"`
 }
 
 
