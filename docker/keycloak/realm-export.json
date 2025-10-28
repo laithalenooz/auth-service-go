@@ -1,7 +1,7 @@
 {
-  "realm": "master",
+  "realm": "auth-service",
   "enabled": true,
-  "displayName": "Master Realm",
+  "displayName": "Auth Service Realm",
   "registrationAllowed": true,
   "registrationEmailAsUsername": false,
   "rememberMe": true,
@@ -18,16 +18,14 @@
   "quickLoginCheckMilliSeconds": 1000,
   "maxDeltaTimeSeconds": 43200,
   "failureFactor": 30,
-  "defaultRoles": ["offline_access", "uma_authorization"],
-  "requiredCredentials": ["password"],
   "clients": [
     {
-      "clientId": "auth-service",
+      "clientId": "auth-service-client",
       "name": "Auth Service Client",
       "description": "Client for auth service API access with admin permissions",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
-      "secret": "hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK",
+      "secret": "auth-service-secret",
       "redirectUris": ["*"],
       "webOrigins": ["*"],
       "standardFlowEnabled": true,
@@ -38,19 +36,78 @@
       "frontchannelLogout": false,
       "protocol": "openid-connect",
       "fullScopeAllowed": true,
-      "nodeReRegistrationTimeout": -1,
-      "defaultClientScopes": ["web-origins", "role_list", "profile", "roles", "email"],
-      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+      "nodeReRegistrationTimeout": -1
     }
   ],
   "users": [
     {
-      "username": "service-account-auth-service",
+      "username": "admin",
       "enabled": true,
-      "serviceAccountClientId": "auth-service",
+      "firstName": "Admin",
+      "lastName": "User",
+      "email": "admin@example.com",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["admin", "user"],
       "clientRoles": {
-        "realm-management": ["manage-users", "manage-clients", "manage-realm", "view-users", "view-clients", "view-realm", "create-client"],
-        "master-realm": ["manage-users", "manage-clients", "manage-realm", "view-users", "view-clients", "view-realm"]
+        "realm-management": [
+          "view-realm",
+          "view-identity-providers",
+          "manage-identity-providers",
+          "impersonation",
+          "realm-admin",
+          "create-client",
+          "manage-users",
+          "query-realms",
+          "view-authorization",
+          "query-clients",
+          "query-users",
+          "manage-events",
+          "manage-realm",
+          "view-events",
+          "view-users",
+          "view-clients",
+          "manage-authorization",
+          "manage-clients",
+          "query-groups"
+        ]
+      }
+    },
+    {
+      "username": "testuser",
+      "enabled": true,
+      "firstName": "Test",
+      "lastName": "User",
+      "email": "testuser@example.com",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "testuser",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["user"]
+    },
+    {
+      "username": "service-account-auth-service-client",
+      "enabled": true,
+      "serviceAccountClientId": "auth-service-client",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "manage-clients",
+          "manage-realm",
+          "view-users",
+          "view-clients",
+          "view-realm"
+        ]
       }
     }
   ],
@@ -62,10 +119,8 @@
       },
       {
         "name": "user",
-        "description": "User role"
+        "description": "Standard user role"
       }
     ]
-  },
-  "defaultDefaultClientScopes": ["role_list", "profile", "email", "web-origins"],
-  "defaultOptionalClientScopes": ["offline_access", "address", "phone", "microprofile-jwt"]
+  }
 }

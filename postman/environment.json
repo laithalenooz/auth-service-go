@@ -16,19 +16,19 @@
 		},
 		{
 			"key": "keycloak_client_id",
-			"value": "auth-service",
+			"value": "auth-service-client",
 			"type": "default",
 			"enabled": true
 		},
 		{
 			"key": "keycloak_client_secret",
-			"value": "hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK",
+			"value": "auth-service-secret",
 			"type": "secret",
 			"enabled": true
 		},
 		{
 			"key": "keycloak_realm",
-			"value": "master",
+			"value": "auth-service",
 			"type": "default",
 			"enabled": true
 		},

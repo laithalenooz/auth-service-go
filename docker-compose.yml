@@ -12,9 +12,9 @@ services:
       - "8081:8081"  # gRPC API
     environment:
       - KEYCLOAK_BASE_URL=http://keycloak:8080
-      - KEYCLOAK_REALM=master
-      - KEYCLOAK_CLIENT_ID=auth-service
-      - KEYCLOAK_CLIENT_SECRET=hejd9wWpPdp4fmFYFjGwU7dBJErTWQaK
+      - KEYCLOAK_REALM=auth-service
+      - KEYCLOAK_CLIENT_ID=auth-service-client
+      - KEYCLOAK_CLIENT_SECRET=auth-service-secret
       - REDIS_URL=redis://redis:6379
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
       - OTEL_SERVICE_NAME=auth-service

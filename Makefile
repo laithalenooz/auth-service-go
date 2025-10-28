@@ -96,6 +96,11 @@ deploy-prod: docker-build-prod docker-up-prod ## Build and deploy production env
 fix-keycloak: ## Fix common Keycloak startup issues
 	./scripts/fix-keycloak.sh
 
+fix-keycloak-import: ## Fix Keycloak import conflicts (clean start)
+	docker-compose down -v
+	docker volume rm auth-service-go_postgres-data auth-service-go_keycloak-data 2>/dev/null || true
+	./scripts/fix-keycloak.sh
+
 docker-logs-keycloak: ## Show Keycloak logs
 	docker-compose logs -f keycloak
 

@@ -45,11 +45,11 @@ cleanup() {
     docker-compose down -v 2>/dev/null || true
     
     # Remove specific containers if they exist
-    docker rm -f keycloak postgres redis 2>/dev/null || true
+    docker rm -f keycloak postgres redis auth-service 2>/dev/null || true
     
-    # Remove volumes (optional - uncomment if you want to start fresh)
-    # docker volume rm auth-service-go_postgres-data 2>/dev/null || true
-    # docker volume rm auth-service-go_keycloak-data 2>/dev/null || true
+    # Remove volumes to avoid import conflicts
+    docker volume rm auth-service-go_postgres-data 2>/dev/null || true
+    docker volume rm auth-service-go_keycloak-data 2>/dev/null || true
     
     print_status "Cleanup completed ✓"
 }
@@ -178,11 +178,16 @@ show_status() {
     print_status "Service URLs:"
     echo "============="
     echo "🔐 Keycloak Admin: http://localhost:8090 (admin/admin)"
+    echo "🔐 Auth Service Realm: http://localhost:8090/realms/auth-service"
     echo "🚀 Auth Service API: http://localhost:8080"
     echo "📊 Grafana: http://localhost:3000 (admin/admin)"
     echo "📈 Prometheus: http://localhost:9090"
     echo "🔍 Jaeger: http://localhost:16686"
     echo ""
+    echo "Test credentials:"
+    echo "- Admin user: admin/admin"
+    echo "- Test user: testuser/testuser"
+    echo "- Client: auth-service-client / auth-service-secret"
 }
 
 # Show logs for debugging
