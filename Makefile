@@ -92,6 +92,24 @@ deploy-dev: docker-build docker-up ## Build and deploy development environment
 
 deploy-prod: docker-build-prod docker-up-prod ## Build and deploy production environment
 
+# Troubleshooting commands
+fix-keycloak: ## Fix common Keycloak startup issues
+	./scripts/fix-keycloak.sh
+
+docker-logs-keycloak: ## Show Keycloak logs
+	docker-compose logs -f keycloak
+
+docker-logs-postgres: ## Show PostgreSQL logs
+	docker-compose logs -f postgres
+
+docker-restart-keycloak: ## Restart only Keycloak service
+	docker-compose restart keycloak
+
+docker-clean-all: ## Clean all Docker resources (containers, volumes, images)
+	docker-compose down -v
+	docker system prune -af
+	docker volume prune -f
+
 # Build without Docker (requires local Go and buf installation)
 build-local: proto ## Build application locally (requires Go and buf)
 	CGO_ENABLED=0 go build -ldflags='-w -s' -o bin/auth-service ./cmd/server

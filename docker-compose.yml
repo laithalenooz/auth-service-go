@@ -63,38 +63,49 @@ services:
       - KC_HOSTNAME_STRICT=false
       - KC_HOSTNAME_STRICT_HTTPS=false
       - KC_HTTP_ENABLED=true
+      - KC_HEALTH_ENABLED=true
+      - KC_METRICS_ENABLED=true
+      - KC_LOG_LEVEL=INFO
+      - JAVA_OPTS_APPEND="-Dkeycloak.profile.feature.upload_scripts=enabled"
     ports:
       - "8090:8080"
     volumes:
       - ./docker/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
-    command: ["start-dev", "--import-realm"]
+      - keycloak-data:/opt/keycloak/data
+    command: ["start-dev", "--import-realm", "--verbose"]
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - auth-service-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
       interval: 30s
       timeout: 10s
-      retries: 5
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
 
   # PostgreSQL for Keycloak
   postgres:
-    image: postgres:15
+    image: postgres:15-alpine
     container_name: postgres
     environment:
       - POSTGRES_DB=keycloak
       - POSTGRES_USER=keycloak
       - POSTGRES_PASSWORD=keycloak
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
       - auth-service-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    restart: unless-stopped
 
   # OpenTelemetry Collector
   otel-collector:
@@ -180,6 +191,8 @@ volumes:
   redis-data:
     driver: local
   postgres-data:
+    driver: local
+  keycloak-data:
     driver: local
   prometheus-data:
     driver: local
