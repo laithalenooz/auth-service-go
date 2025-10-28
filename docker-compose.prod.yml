@@ -73,7 +73,7 @@ services:
 
   # Keycloak - Production configuration
   keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    image: quay.io/keycloak/keycloak:26.3.1
     container_name: keycloak-prod
     environment:
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
