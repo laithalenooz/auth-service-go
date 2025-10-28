@@ -158,6 +158,63 @@ func (s *GRPCServer) CreateUser(ctx context.Context, req *keycloakv1.CreateUserR
 	}, nil
 }
 
+// VerifyToken verifies a token
+func (s *GRPCServer) VerifyToken(ctx context.Context, req *keycloakv1.VerifyTokenRequest) (*keycloakv1.VerifyTokenResponse, error) {
+	ctx, span := s.tracer.Start(ctx, "grpc.VerifyToken",
+		trace.WithAttributes(
+			attribute.String("grpc.method", "VerifyToken"),
+			attribute.String("keycloak.realm", req.RealmName),
+			attribute.String("keycloak.client_id", req.ClientId),
+		),
+	)
+	defer span.End()
+
+	if req.Token == "" {
+		span.SetStatus(otelcodes.Error, "token is required")
+		return nil, status.Error(codes.InvalidArgument, "token is required")
+	}
+
+	if req.RealmName == "" {
+		span.SetStatus(otelcodes.Error, "realm name is required")
+		return nil, status.Error(codes.InvalidArgument, "realm name is required")
+	}
+
+	// Call Keycloak client to verify token
+	introspection, err := s.keycloakClient.VerifyToken(ctx, req.RealmName, req.Token, req.ClientId, req.ClientSecret)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(otelcodes.Error, "failed to verify token")
+		return &keycloakv1.VerifyTokenResponse{
+			Valid:            false,
+			Active:           false,
+			Error:            "verification_failed",
+			ErrorDescription: err.Error(),
+		}, nil
+	}
+
+	span.SetStatus(otelcodes.Ok, "token verified successfully")
+
+	// Convert scope string to slice
+	var scopes []string
+	if introspection.Scope != "" {
+		scopes = []string{introspection.Scope}
+	}
+
+	return &keycloakv1.VerifyTokenResponse{
+		Valid:     introspection.Active,
+		Active:    introspection.Active,
+		ClientId:  introspection.ClientID,
+		Username:  introspection.Username,
+		TokenType: introspection.TokenType,
+		Exp:       introspection.Exp,
+		Iat:       introspection.Iat,
+		Sub:       introspection.Sub,
+		Aud:       introspection.Aud,
+		Iss:       introspection.Iss,
+		Scope:     scopes,
+	}, nil
+}
+
 // GetUser retrieves a user by ID
 func (s *GRPCServer) GetUser(ctx context.Context, req *keycloakv1.GetUserRequest) (*keycloakv1.GetUserResponse, error) {
 	ctx, span := s.tracer.Start(ctx, "grpc.GetUser",
@@ -439,7 +496,7 @@ func (s *GRPCServer) RefreshToken(ctx context.Context, req *keycloakv1.RefreshTo
 	}
 
 	// Call Keycloak client to refresh token
-	tokenResponse, err := s.keycloakClient.RefreshToken(ctx, req.RefreshToken, req.ClientId, req.ClientSecret)
+	tokenResponse, err := s.keycloakClient.RefreshToken(ctx, req.RealmName, req.RefreshToken, req.ClientId, req.ClientSecret)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(otelcodes.Error, "failed to refresh token")

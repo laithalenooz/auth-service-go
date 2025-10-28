@@ -625,6 +625,66 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "Verify Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Token verification completed', function () {",
+									"    pm.response.to.have.status(200);",
+									"    const response = pm.response.json();",
+									"    pm.expect(response).to.have.property('valid');",
+									"    pm.expect(response).to.have.property('active');",
+									"    ",
+									"    if (response.valid && response.active) {",
+									"        pm.test('Valid token has required fields', function () {",
+									"            pm.expect(response).to.have.property('username');",
+									"            pm.expect(response).to.have.property('client_id');",
+									"            pm.expect(response).to.have.property('token_type');",
+									"            pm.expect(response).to.have.property('exp');",
+									"            pm.expect(response).to.have.property('iat');",
+									"        });",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"token\": \"{{test_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/tokens/verify",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "tokens", "verify"]
+						}
+					},
+					"response": []
 				}
 			]
 		},

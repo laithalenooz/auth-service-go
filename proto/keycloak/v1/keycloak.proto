@@ -25,6 +25,7 @@ service KeycloakService {
   // Token Operations
   rpc IntrospectToken(IntrospectTokenRequest) returns (IntrospectTokenResponse);
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+  rpc VerifyToken(VerifyTokenRequest) returns (VerifyTokenResponse);
 
   // Health Check
   rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);
@@ -178,6 +179,7 @@ message RefreshTokenRequest {
   string refresh_token = 2;
   string client_id = 3;
   string client_secret = 4;
+  string grant_type = 5;
 }
 
 message RefreshTokenResponse {
@@ -187,6 +189,29 @@ message RefreshTokenResponse {
   int32 expires_in = 4;
   int32 refresh_expires_in = 5;
   string scope = 6;
+}
+
+message VerifyTokenRequest {
+  string realm_name = 1;
+  string token = 2;
+  string client_id = 3;
+  string client_secret = 4;
+}
+
+message VerifyTokenResponse {
+  bool valid = 1;
+  bool active = 2;
+  string client_id = 3;
+  string username = 4;
+  string token_type = 5;
+  int64 exp = 6;
+  int64 iat = 7;
+  string sub = 8;
+  string aud = 9;
+  string iss = 10;
+  repeated string scope = 11;
+  string error = 12;
+  string error_description = 13;
 }
 
 // Registration Messages

@@ -624,16 +624,16 @@ func (c *Client) getUsersCount(ctx context.Context, search, email, username stri
 }
 
 // RefreshToken refreshes an access token using a refresh token
-func (c *Client) RefreshToken(ctx context.Context, refreshToken, clientID, clientSecret string) (*TokenResponse, error) {
+func (c *Client) RefreshToken(ctx context.Context, realm, refreshToken, clientID, clientSecret string) (*TokenResponse, error) {
 	ctx, span := c.tracer.Start(ctx, "keycloak.token.refresh",
 		trace.WithAttributes(
-			attribute.String("keycloak.realm", c.config.Realm),
+			attribute.String("keycloak.realm", realm),
 			attribute.String("keycloak.client_id", clientID),
 		),
 	)
 	defer span.End()
 
-	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", c.baseURL, c.config.Realm)
+	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", c.baseURL, realm)
 
 	data := url.Values{}
 	data.Set("grant_type", "refresh_token")
@@ -1033,4 +1033,69 @@ func (c *Client) ResetPassword(ctx context.Context, realm, username, email, clie
 
 	span.SetStatus(codes.Ok, "password reset email sent")
 	return nil
+}
+
+// VerifyToken verifies an access token by introspecting it
+func (c *Client) VerifyToken(ctx context.Context, realm, token, clientID, clientSecret string) (*TokenIntrospection, error) {
+	ctx, span := c.tracer.Start(ctx, "keycloak.token.verify",
+		trace.WithAttributes(
+			attribute.String("keycloak.realm", realm),
+			attribute.String("keycloak.client_id", clientID),
+		),
+	)
+	defer span.End()
+
+	introspectURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token/introspect", c.baseURL, realm)
+
+	data := url.Values{}
+	data.Set("token", token)
+	data.Set("client_id", clientID)
+	if clientSecret != "" {
+		data.Set("client_secret", clientSecret)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", introspectURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create request")
+		return nil, fmt.Errorf("failed to create verify token request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "request failed")
+		return nil, fmt.Errorf("failed to verify token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	span.SetAttributes(
+		attribute.Int("http.status_code", resp.StatusCode),
+		attribute.String("http.method", "POST"),
+		attribute.String("http.url", introspectURL),
+	)
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to read response")
+		return nil, fmt.Errorf("failed to read verify token response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		return nil, fmt.Errorf("failed to verify token: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var introspection TokenIntrospection
+	if err := json.Unmarshal(body, &introspection); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to parse response")
+		return nil, fmt.Errorf("failed to parse verify token response: %w", err)
+	}
+
+	span.SetStatus(codes.Ok, "token verified successfully")
+	return &introspection, nil
 }

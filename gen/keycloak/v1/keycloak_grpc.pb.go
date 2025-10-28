@@ -31,6 +31,7 @@ const (
 	KeycloakService_ResetPassword_FullMethodName   = "/keycloak.v1.KeycloakService/ResetPassword"
 	KeycloakService_IntrospectToken_FullMethodName = "/keycloak.v1.KeycloakService/IntrospectToken"
 	KeycloakService_RefreshToken_FullMethodName    = "/keycloak.v1.KeycloakService/RefreshToken"
+	KeycloakService_VerifyToken_FullMethodName     = "/keycloak.v1.KeycloakService/VerifyToken"
 	KeycloakService_HealthCheck_FullMethodName     = "/keycloak.v1.KeycloakService/HealthCheck"
 )
 
@@ -54,6 +55,7 @@ type KeycloakServiceClient interface {
 	// Token Operations
 	IntrospectToken(ctx context.Context, in *IntrospectTokenRequest, opts ...grpc.CallOption) (*IntrospectTokenResponse, error)
 	RefreshToken(ctx context.Context, in *RefreshTokenRequest, opts ...grpc.CallOption) (*RefreshTokenResponse, error)
+	VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenResponse, error)
 	// Health Check
 	HealthCheck(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*HealthCheckResponse, error)
 }
@@ -176,6 +178,16 @@ func (c *keycloakServiceClient) RefreshToken(ctx context.Context, in *RefreshTok
 	return out, nil
 }
 
+func (c *keycloakServiceClient) VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VerifyTokenResponse)
+	err := c.cc.Invoke(ctx, KeycloakService_VerifyToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *keycloakServiceClient) HealthCheck(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*HealthCheckResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(HealthCheckResponse)
@@ -206,6 +218,7 @@ type KeycloakServiceServer interface {
 	// Token Operations
 	IntrospectToken(context.Context, *IntrospectTokenRequest) (*IntrospectTokenResponse, error)
 	RefreshToken(context.Context, *RefreshTokenRequest) (*RefreshTokenResponse, error)
+	VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenResponse, error)
 	// Health Check
 	HealthCheck(context.Context, *emptypb.Empty) (*HealthCheckResponse, error)
 	mustEmbedUnimplementedKeycloakServiceServer()
@@ -250,6 +263,9 @@ func (UnimplementedKeycloakServiceServer) IntrospectToken(context.Context, *Intr
 }
 func (UnimplementedKeycloakServiceServer) RefreshToken(context.Context, *RefreshTokenRequest) (*RefreshTokenResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RefreshToken not implemented")
+}
+func (UnimplementedKeycloakServiceServer) VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method VerifyToken not implemented")
 }
 func (UnimplementedKeycloakServiceServer) HealthCheck(context.Context, *emptypb.Empty) (*HealthCheckResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HealthCheck not implemented")
@@ -473,6 +489,24 @@ func _KeycloakService_RefreshToken_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _KeycloakService_VerifyToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VerifyTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KeycloakServiceServer).VerifyToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KeycloakService_VerifyToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KeycloakServiceServer).VerifyToken(ctx, req.(*VerifyTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _KeycloakService_HealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
@@ -541,6 +575,10 @@ var KeycloakService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RefreshToken",
 			Handler:    _KeycloakService_RefreshToken_Handler,
+		},
+		{
+			MethodName: "VerifyToken",
+			Handler:    _KeycloakService_VerifyToken_Handler,
 		},
 		{
 			MethodName: "HealthCheck",

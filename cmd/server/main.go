@@ -37,13 +37,13 @@ func main() {
 	// Initialize OpenTelemetry
 	ctx := context.Background()
 	telemetryConfig := &telemetry.Config{
-		ServiceName:   cfg.Service.Name,
+		ServiceName:    cfg.Service.Name,
 		ServiceVersion: cfg.Service.Version,
-		Environment:   cfg.Service.Environment,
-		OTLPEndpoint:  cfg.Telemetry.OTLPEndpoint,
-		SamplingRatio: cfg.Telemetry.SamplingRatio,
-		EnableMetrics: cfg.Telemetry.EnableMetrics,
-		EnableTracing: cfg.Telemetry.EnableTracing,
+		Environment:    cfg.Service.Environment,
+		OTLPEndpoint:   cfg.Telemetry.OTLPEndpoint,
+		SamplingRatio:  cfg.Telemetry.SamplingRatio,
+		EnableMetrics:  cfg.Telemetry.EnableMetrics,
+		EnableTracing:  cfg.Telemetry.EnableTracing,
 	}
 
 	shutdown, err := telemetry.InitTracing(ctx, telemetryConfig)
@@ -104,20 +104,61 @@ func main() {
 	}
 }
 
+func verifyTokenHandler(grpcPort int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		client, conn, err := createGRPCClient(grpcPort)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "Failed to connect to gRPC server"})
+			return
+		}
+		defer conn.Close()
+
+		// Extract realm and client parameters from headers
+		realmName := c.GetHeader("X-Realm-Name")
+		clientID := c.GetHeader("X-Client-Id")
+		clientSecret := c.GetHeader("X-Client-Secret")
+
+		// Validate required headers
+		if realmName == "" || clientID == "" || clientSecret == "" {
+			c.JSON(400, gin.H{"error": "X-Realm-Name, X-Client-Id, and X-Client-Secret headers are required"})
+			return
+		}
+
+		var req keycloakv1.VerifyTokenRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Set realm and client parameters from headers
+		req.RealmName = realmName
+		req.ClientId = clientID
+		req.ClientSecret = clientSecret
+
+		resp, err := client.VerifyToken(c.Request.Context(), &req)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, resp)
+	}
+}
+
 func startGRPCServer(grpcServer *server.GRPCServer, port int) {
 	log.Printf("Starting gRPC server on port %d", port)
-	
+
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
 	s := grpcServer.CreateServer()
-	
+
 	// Graceful shutdown
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	
+
 	go func() {
 		<-c
 		log.Println("Shutting down gRPC server...")
@@ -131,10 +172,10 @@ func startGRPCServer(grpcServer *server.GRPCServer, port int) {
 
 func startHTTPServer(cfg *config.Config, httpPort, grpcPort int, healthService *health.HealthService, appMetrics *metrics.Metrics) {
 	log.Printf("Starting HTTP server on port %d (proxying to gRPC on port %d)", httpPort, grpcPort)
-	
+
 	// Create HTTP server with REST endpoints
 	router := createHTTPRouter(cfg, grpcPort, healthService, appMetrics)
-	
+
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", httpPort),
 		Handler: router,
@@ -143,7 +184,7 @@ func startHTTPServer(cfg *config.Config, httpPort, grpcPort int, healthService *
 	// Graceful shutdown
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	
+
 	go func() {
 		<-c
 		log.Println("Shutting down HTTP server...")
@@ -159,7 +200,7 @@ func startHTTPServer(cfg *config.Config, httpPort, grpcPort int, healthService *
 
 func startBothServers(grpcServer *server.GRPCServer, cfg *config.Config, healthService *health.HealthService, appMetrics *metrics.Metrics) {
 	log.Printf("Starting both gRPC server on port %d and HTTP server on port %d", cfg.Server.GRPCPort, cfg.Server.HTTPPort)
-	
+
 	// Start gRPC server in goroutine
 	go func() {
 		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Server.GRPCPort))
@@ -169,7 +210,7 @@ func startBothServers(grpcServer *server.GRPCServer, cfg *config.Config, healthS
 
 		s := grpcServer.CreateServer()
 		log.Printf("gRPC server listening on port %d", cfg.Server.GRPCPort)
-		
+
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("Failed to serve gRPC: %v", err)
 		}
@@ -177,7 +218,7 @@ func startBothServers(grpcServer *server.GRPCServer, cfg *config.Config, healthS
 
 	// Start HTTP server in main goroutine
 	router := createHTTPRouter(cfg, cfg.Server.GRPCPort, healthService, appMetrics)
-	
+
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Server.HTTPPort),
 		Handler: router,
@@ -186,7 +227,7 @@ func startBothServers(grpcServer *server.GRPCServer, cfg *config.Config, healthS
 	// Graceful shutdown
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	
+
 	go func() {
 		<-c
 		log.Println("Shutting down servers...")
@@ -276,6 +317,7 @@ func createHTTPRouter(cfg *config.Config, grpcPort int, healthService *health.He
 		// Token endpoints
 		api.POST("/tokens/introspect", introspectTokenHandler(grpcPort))
 		api.POST("/tokens/refresh", refreshTokenHandler(grpcPort))
+		api.POST("/tokens/verify", verifyTokenHandler(grpcPort))
 	}
 
 	return router
@@ -573,6 +615,7 @@ func refreshTokenHandler(grpcPort int) gin.HandlerFunc {
 		req.RealmName = realmName
 		req.ClientId = clientID
 		req.ClientSecret = clientSecret
+		req.GrantType = "refresh_token"
 
 		resp, err := client.RefreshToken(c.Request.Context(), &req)
 		if err != nil {
