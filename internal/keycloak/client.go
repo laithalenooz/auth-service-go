@@ -1016,23 +1016,22 @@ func (c *Client) ResetPassword(ctx context.Context, realm, username, email, clie
 
 	// Send password reset email using Keycloak Admin API
 	resetURL := fmt.Sprintf("%s/admin/realms/%s/users/%s/execute-actions-email", c.baseURL, realm, userID)
-
-	actions := []string{"UPDATE_PASSWORD"}
-	reqBody := map[string]interface{}{
-		"actions": actions,
-	}
 	
-	// Only add client_id if it's not empty
+	// Add query parameters for client_id and redirect_uri if provided
+	params := url.Values{}
 	if clientID != "" {
-		reqBody["client_id"] = clientID
+		params.Add("client_id", clientID)
 	}
-	
-	// Only add redirect_uri if it's not empty
 	if redirectURI != "" {
-		reqBody["redirect_uri"] = redirectURI
+		params.Add("redirect_uri", redirectURI)
+	}
+	if len(params) > 0 {
+		resetURL += "?" + params.Encode()
 	}
 
-	jsonData, err := json.Marshal(reqBody)
+	// The body should be a simple JSON array of actions
+	actions := []string{"UPDATE_PASSWORD"}
+	jsonData, err := json.Marshal(actions)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to marshal request")
