@@ -115,6 +115,13 @@ docker-clean-all: ## Clean all Docker resources (containers, volumes, images)
 	docker system prune -af
 	docker volume prune -f
 
+# Testing commands
+test-reset-password: ## Test reset password functionality
+	./scripts/test-reset-password.sh
+
+test-service: ## Test all service endpoints
+	./scripts/test-service.sh
+
 # Build without Docker (requires local Go and buf installation)
 build-local: proto ## Build application locally (requires Go and buf)
 	CGO_ENABLED=0 go build -ldflags='-w -s' -o bin/auth-service ./cmd/server

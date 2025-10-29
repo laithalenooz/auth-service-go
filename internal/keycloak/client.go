@@ -1015,13 +1015,21 @@ func (c *Client) ResetPassword(ctx context.Context, realm, username, email, clie
 	}
 
 	// Send password reset email using Keycloak Admin API
-	resetURL := fmt.Sprintf("%s/admin/realms/%s/users/%s/execute-actions-email", c.baseURL, c.config.Realm, userID)
+	resetURL := fmt.Sprintf("%s/admin/realms/%s/users/%s/execute-actions-email", c.baseURL, realm, userID)
 
 	actions := []string{"UPDATE_PASSWORD"}
 	reqBody := map[string]interface{}{
-		"actions":     actions,
-		"client_id":   clientID,
-		"redirect_uri": redirectURI,
+		"actions": actions,
+	}
+	
+	// Only add client_id if it's not empty
+	if clientID != "" {
+		reqBody["client_id"] = clientID
+	}
+	
+	// Only add redirect_uri if it's not empty
+	if redirectURI != "" {
+		reqBody["redirect_uri"] = redirectURI
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -1058,6 +1066,13 @@ func (c *Client) ResetPassword(ctx context.Context, realm, username, email, clie
 	if resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		
+		// Log the request details for debugging
+		span.SetAttributes(
+			attribute.String("request.body", string(jsonData)),
+			attribute.String("response.body", string(body)),
+		)
+		
 		return fmt.Errorf("failed to reset password: HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
