@@ -1143,3 +1143,76 @@ func (c *Client) VerifyToken(ctx context.Context, realm, token, clientID, client
 	span.SetStatus(codes.Ok, "token verified successfully")
 	return &introspection, nil
 }
+
+// ImpersonateUser performs user impersonation using OAuth2 token exchange
+func (c *Client) ImpersonateUser(ctx context.Context, realm, clientID, clientSecret, targetUserID, targetClientID string) (*TokenResponse, error) {
+	ctx, span := c.tracer.Start(ctx, "keycloak.impersonate_user",
+		trace.WithAttributes(
+			attribute.String("keycloak.realm", realm),
+			attribute.String("keycloak.client_id", clientID),
+			attribute.String("keycloak.target_user_id", targetUserID),
+			attribute.String("keycloak.target_client_id", targetClientID),
+		),
+	)
+	defer span.End()
+
+	// Construct token endpoint URL
+	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", c.baseURL, realm)
+
+	// Prepare form data for OAuth2 token exchange
+	data := url.Values{}
+	data.Set("client_id", clientID)
+	data.Set("client_secret", clientSecret)
+	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
+	data.Set("requested_subject", targetUserID)
+	
+	// Add target client ID as audience if provided
+	if targetClientID != "" {
+		data.Set("audience", targetClientID)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create request")
+		return nil, fmt.Errorf("failed to create impersonation request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "request failed")
+		return nil, fmt.Errorf("failed to send impersonation request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	span.SetAttributes(
+		attribute.Int("http.status_code", resp.StatusCode),
+		attribute.String("http.method", "POST"),
+		attribute.String("http.url", tokenURL),
+	)
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to read response")
+		return nil, fmt.Errorf("failed to read impersonation response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		return nil, fmt.Errorf("failed to impersonate user: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var tokenResponse TokenResponse
+	if err := json.Unmarshal(body, &tokenResponse); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to parse response")
+		return nil, fmt.Errorf("failed to parse impersonation response: %w", err)
+	}
+
+	span.SetStatus(codes.Ok, "user impersonation successful")
+	return &tokenResponse, nil
+}

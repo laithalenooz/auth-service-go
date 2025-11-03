@@ -306,6 +306,7 @@ func createHTTPRouter(cfg *config.Config, grpcPort int, healthService *health.He
 		api.POST("/auth/logout", logoutHandler(grpcPort))
 		api.POST("/auth/register", registerHandler(grpcPort))
 		api.POST("/auth/reset-password", resetPasswordHandler(grpcPort))
+		api.POST("/auth/impersonate", impersonateUserHandler(grpcPort))
 
 		// User management endpoints
 		api.POST("/users", createUserHandler(grpcPort))
@@ -788,6 +789,47 @@ func resetPasswordHandler(grpcPort int) gin.HandlerFunc {
 		}
 
 		c.JSON(200, gin.H{"message": "Password reset email sent successfully"})
+	}
+}
+
+func impersonateUserHandler(grpcPort int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		client, conn, err := createGRPCClient(grpcPort)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "Failed to connect to gRPC server"})
+			return
+		}
+		defer conn.Close()
+
+		// Extract realm and client parameters from headers
+		realmName := c.GetHeader("X-Realm-Name")
+		clientID := c.GetHeader("X-Client-Id")
+		clientSecret := c.GetHeader("X-Client-Secret")
+
+		// Validate required headers
+		if realmName == "" || clientID == "" || clientSecret == "" {
+			c.JSON(400, gin.H{"error": "X-Realm-Name, X-Client-Id, and X-Client-Secret headers are required"})
+			return
+		}
+
+		var req keycloakv1.ImpersonateUserRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Set realm and client parameters from headers
+		req.RealmName = realmName
+		req.ClientId = clientID
+		req.ClientSecret = clientSecret
+
+		resp, err := client.ImpersonateUser(c.Request.Context(), &req)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, resp)
 	}
 }
 

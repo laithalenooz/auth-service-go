@@ -119,6 +119,9 @@ docker-clean-all: ## Clean all Docker resources (containers, volumes, images)
 test-reset-password: ## Test reset password functionality
 	./scripts/test-reset-password.sh
 
+test-impersonation: ## Test user impersonation functionality
+	./scripts/test-impersonation.sh
+
 test-keycloak-direct: ## Test Keycloak API directly (for debugging)
 	./scripts/test-keycloak-direct.sh
 

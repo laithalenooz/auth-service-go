@@ -97,6 +97,24 @@
 			"value": "http://localhost:16686",
 			"type": "default",
 			"enabled": true
+		},
+		{
+			"key": "target_user_id",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "impersonated_access_token",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "impersonated_refresh_token",
+			"value": "",
+			"type": "default",
+			"enabled": true
 		}
 	],
 	"_postman_variable_scope": "environment"

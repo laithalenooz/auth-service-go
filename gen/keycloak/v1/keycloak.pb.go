@@ -1996,6 +1996,167 @@ func (x *ResetPasswordRequest) GetRedirectUri() string {
 	return ""
 }
 
+// Impersonation Messages
+type ImpersonateUserRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RealmName      string                 `protobuf:"bytes,1,opt,name=realm_name,json=realmName,proto3" json:"realm_name,omitempty"`
+	ClientId       string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientSecret   string                 `protobuf:"bytes,3,opt,name=client_secret,json=clientSecret,proto3" json:"client_secret,omitempty"`
+	TargetUserId   string                 `protobuf:"bytes,4,opt,name=target_user_id,json=targetUserId,proto3" json:"target_user_id,omitempty"`
+	TargetClientId string                 `protobuf:"bytes,5,opt,name=target_client_id,json=targetClientId,proto3" json:"target_client_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ImpersonateUserRequest) Reset() {
+	*x = ImpersonateUserRequest{}
+	mi := &file_keycloak_v1_keycloak_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImpersonateUserRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImpersonateUserRequest) ProtoMessage() {}
+
+func (x *ImpersonateUserRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_keycloak_v1_keycloak_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImpersonateUserRequest.ProtoReflect.Descriptor instead.
+func (*ImpersonateUserRequest) Descriptor() ([]byte, []int) {
+	return file_keycloak_v1_keycloak_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ImpersonateUserRequest) GetRealmName() string {
+	if x != nil {
+		return x.RealmName
+	}
+	return ""
+}
+
+func (x *ImpersonateUserRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *ImpersonateUserRequest) GetClientSecret() string {
+	if x != nil {
+		return x.ClientSecret
+	}
+	return ""
+}
+
+func (x *ImpersonateUserRequest) GetTargetUserId() string {
+	if x != nil {
+		return x.TargetUserId
+	}
+	return ""
+}
+
+func (x *ImpersonateUserRequest) GetTargetClientId() string {
+	if x != nil {
+		return x.TargetClientId
+	}
+	return ""
+}
+
+type ImpersonateUserResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	AccessToken      string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	RefreshToken     string                 `protobuf:"bytes,2,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	TokenType        string                 `protobuf:"bytes,3,opt,name=token_type,json=tokenType,proto3" json:"token_type,omitempty"`
+	ExpiresIn        int32                  `protobuf:"varint,4,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`
+	RefreshExpiresIn int32                  `protobuf:"varint,5,opt,name=refresh_expires_in,json=refreshExpiresIn,proto3" json:"refresh_expires_in,omitempty"`
+	Scope            string                 `protobuf:"bytes,6,opt,name=scope,proto3" json:"scope,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ImpersonateUserResponse) Reset() {
+	*x = ImpersonateUserResponse{}
+	mi := &file_keycloak_v1_keycloak_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImpersonateUserResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImpersonateUserResponse) ProtoMessage() {}
+
+func (x *ImpersonateUserResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_keycloak_v1_keycloak_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImpersonateUserResponse.ProtoReflect.Descriptor instead.
+func (*ImpersonateUserResponse) Descriptor() ([]byte, []int) {
+	return file_keycloak_v1_keycloak_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ImpersonateUserResponse) GetAccessToken() string {
+	if x != nil {
+		return x.AccessToken
+	}
+	return ""
+}
+
+func (x *ImpersonateUserResponse) GetRefreshToken() string {
+	if x != nil {
+		return x.RefreshToken
+	}
+	return ""
+}
+
+func (x *ImpersonateUserResponse) GetTokenType() string {
+	if x != nil {
+		return x.TokenType
+	}
+	return ""
+}
+
+func (x *ImpersonateUserResponse) GetExpiresIn() int32 {
+	if x != nil {
+		return x.ExpiresIn
+	}
+	return 0
+}
+
+func (x *ImpersonateUserResponse) GetRefreshExpiresIn() int32 {
+	if x != nil {
+		return x.RefreshExpiresIn
+	}
+	return 0
+}
+
+func (x *ImpersonateUserResponse) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
 // Health Check Messages
 type HealthCheckResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2008,7 +2169,7 @@ type HealthCheckResponse struct {
 
 func (x *HealthCheckResponse) Reset() {
 	*x = HealthCheckResponse{}
-	mi := &file_keycloak_v1_keycloak_proto_msgTypes[22]
+	mi := &file_keycloak_v1_keycloak_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2020,7 +2181,7 @@ func (x *HealthCheckResponse) String() string {
 func (*HealthCheckResponse) ProtoMessage() {}
 
 func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_keycloak_v1_keycloak_proto_msgTypes[22]
+	mi := &file_keycloak_v1_keycloak_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2033,7 +2194,7 @@ func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckResponse.ProtoReflect.Descriptor instead.
 func (*HealthCheckResponse) Descriptor() ([]byte, []int) {
-	return file_keycloak_v1_keycloak_proto_rawDescGZIP(), []int{22}
+	return file_keycloak_v1_keycloak_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *HealthCheckResponse) GetStatus() string {
@@ -2285,14 +2446,30 @@ const file_keycloak_v1_keycloak_proto_rawDesc = "" +
 	"\x05email\x18\x03 \x01(\tR\x05email\x12\x1b\n" +
 	"\tclient_id\x18\x04 \x01(\tR\bclientId\x12#\n" +
 	"\rclient_secret\x18\x05 \x01(\tR\fclientSecret\x12!\n" +
-	"\fredirect_uri\x18\x06 \x01(\tR\vredirectUri\"\x80\x02\n" +
+	"\fredirect_uri\x18\x06 \x01(\tR\vredirectUri\"\xc9\x01\n" +
+	"\x16ImpersonateUserRequest\x12\x1d\n" +
+	"\n" +
+	"realm_name\x18\x01 \x01(\tR\trealmName\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12#\n" +
+	"\rclient_secret\x18\x03 \x01(\tR\fclientSecret\x12$\n" +
+	"\x0etarget_user_id\x18\x04 \x01(\tR\ftargetUserId\x12(\n" +
+	"\x10target_client_id\x18\x05 \x01(\tR\x0etargetClientId\"\xe3\x01\n" +
+	"\x17ImpersonateUserResponse\x12!\n" +
+	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
+	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\x12\x1d\n" +
+	"\n" +
+	"token_type\x18\x03 \x01(\tR\ttokenType\x12\x1d\n" +
+	"\n" +
+	"expires_in\x18\x04 \x01(\x05R\texpiresIn\x12,\n" +
+	"\x12refresh_expires_in\x18\x05 \x01(\x05R\x10refreshExpiresIn\x12\x14\n" +
+	"\x05scope\x18\x06 \x01(\tR\x05scope\"\x80\x02\n" +
 	"\x13HealthCheckResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12V\n" +
 	"\fdependencies\x18\x03 \x03(\v22.keycloak.v1.HealthCheckResponse.DependenciesEntryR\fdependencies\x1a?\n" +
 	"\x11DependenciesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xe8\a\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xc6\b\n" +
 	"\x0fKeycloakService\x12M\n" +
 	"\n" +
 	"CreateUser\x12\x1e.keycloak.v1.CreateUserRequest\x1a\x1f.keycloak.v1.CreateUserResponse\x12D\n" +
@@ -2306,6 +2483,7 @@ const file_keycloak_v1_keycloak_proto_rawDesc = "" +
 	"\x06Logout\x12\x1a.keycloak.v1.LogoutRequest\x1a\x16.google.protobuf.Empty\x12G\n" +
 	"\bRegister\x12\x1c.keycloak.v1.RegisterRequest\x1a\x1d.keycloak.v1.RegisterResponse\x12J\n" +
 	"\rResetPassword\x12!.keycloak.v1.ResetPasswordRequest\x1a\x16.google.protobuf.Empty\x12\\\n" +
+	"\x0fImpersonateUser\x12#.keycloak.v1.ImpersonateUserRequest\x1a$.keycloak.v1.ImpersonateUserResponse\x12\\\n" +
 	"\x0fIntrospectToken\x12#.keycloak.v1.IntrospectTokenRequest\x1a$.keycloak.v1.IntrospectTokenResponse\x12S\n" +
 	"\fRefreshToken\x12 .keycloak.v1.RefreshTokenRequest\x1a!.keycloak.v1.RefreshTokenResponse\x12P\n" +
 	"\vVerifyToken\x12\x1f.keycloak.v1.VerifyTokenRequest\x1a .keycloak.v1.VerifyTokenResponse\x12G\n" +
@@ -2324,7 +2502,7 @@ func file_keycloak_v1_keycloak_proto_rawDescGZIP() []byte {
 	return file_keycloak_v1_keycloak_proto_rawDescData
 }
 
-var file_keycloak_v1_keycloak_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_keycloak_v1_keycloak_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_keycloak_v1_keycloak_proto_goTypes = []any{
 	(*User)(nil),                    // 0: keycloak.v1.User
 	(*CreateUserRequest)(nil),       // 1: keycloak.v1.CreateUserRequest
@@ -2348,31 +2526,33 @@ var file_keycloak_v1_keycloak_proto_goTypes = []any{
 	(*RegisterRequest)(nil),         // 19: keycloak.v1.RegisterRequest
 	(*RegisterResponse)(nil),        // 20: keycloak.v1.RegisterResponse
 	(*ResetPasswordRequest)(nil),    // 21: keycloak.v1.ResetPasswordRequest
-	(*HealthCheckResponse)(nil),     // 22: keycloak.v1.HealthCheckResponse
-	nil,                             // 23: keycloak.v1.User.AttributesEntry
-	nil,                             // 24: keycloak.v1.CreateUserRequest.AttributesEntry
-	nil,                             // 25: keycloak.v1.UpdateUserRequest.AttributesEntry
-	nil,                             // 26: keycloak.v1.IntrospectTokenResponse.ExtraEntry
-	nil,                             // 27: keycloak.v1.RegisterRequest.AttributesEntry
-	nil,                             // 28: keycloak.v1.HealthCheckResponse.DependenciesEntry
-	(*timestamppb.Timestamp)(nil),   // 29: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),           // 30: google.protobuf.Empty
+	(*ImpersonateUserRequest)(nil),  // 22: keycloak.v1.ImpersonateUserRequest
+	(*ImpersonateUserResponse)(nil), // 23: keycloak.v1.ImpersonateUserResponse
+	(*HealthCheckResponse)(nil),     // 24: keycloak.v1.HealthCheckResponse
+	nil,                             // 25: keycloak.v1.User.AttributesEntry
+	nil,                             // 26: keycloak.v1.CreateUserRequest.AttributesEntry
+	nil,                             // 27: keycloak.v1.UpdateUserRequest.AttributesEntry
+	nil,                             // 28: keycloak.v1.IntrospectTokenResponse.ExtraEntry
+	nil,                             // 29: keycloak.v1.RegisterRequest.AttributesEntry
+	nil,                             // 30: keycloak.v1.HealthCheckResponse.DependenciesEntry
+	(*timestamppb.Timestamp)(nil),   // 31: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),           // 32: google.protobuf.Empty
 }
 var file_keycloak_v1_keycloak_proto_depIdxs = []int32{
-	29, // 0: keycloak.v1.User.created_timestamp:type_name -> google.protobuf.Timestamp
-	23, // 1: keycloak.v1.User.attributes:type_name -> keycloak.v1.User.AttributesEntry
-	24, // 2: keycloak.v1.CreateUserRequest.attributes:type_name -> keycloak.v1.CreateUserRequest.AttributesEntry
+	31, // 0: keycloak.v1.User.created_timestamp:type_name -> google.protobuf.Timestamp
+	25, // 1: keycloak.v1.User.attributes:type_name -> keycloak.v1.User.AttributesEntry
+	26, // 2: keycloak.v1.CreateUserRequest.attributes:type_name -> keycloak.v1.CreateUserRequest.AttributesEntry
 	0,  // 3: keycloak.v1.CreateUserResponse.user:type_name -> keycloak.v1.User
 	0,  // 4: keycloak.v1.LoginResponse.user:type_name -> keycloak.v1.User
 	0,  // 5: keycloak.v1.GetUserResponse.user:type_name -> keycloak.v1.User
-	25, // 6: keycloak.v1.UpdateUserRequest.attributes:type_name -> keycloak.v1.UpdateUserRequest.AttributesEntry
+	27, // 6: keycloak.v1.UpdateUserRequest.attributes:type_name -> keycloak.v1.UpdateUserRequest.AttributesEntry
 	0,  // 7: keycloak.v1.UpdateUserResponse.user:type_name -> keycloak.v1.User
 	0,  // 8: keycloak.v1.ListUsersResponse.users:type_name -> keycloak.v1.User
-	26, // 9: keycloak.v1.IntrospectTokenResponse.extra:type_name -> keycloak.v1.IntrospectTokenResponse.ExtraEntry
-	27, // 10: keycloak.v1.RegisterRequest.attributes:type_name -> keycloak.v1.RegisterRequest.AttributesEntry
-	29, // 11: keycloak.v1.RegisterResponse.created_timestamp:type_name -> google.protobuf.Timestamp
-	29, // 12: keycloak.v1.HealthCheckResponse.timestamp:type_name -> google.protobuf.Timestamp
-	28, // 13: keycloak.v1.HealthCheckResponse.dependencies:type_name -> keycloak.v1.HealthCheckResponse.DependenciesEntry
+	28, // 9: keycloak.v1.IntrospectTokenResponse.extra:type_name -> keycloak.v1.IntrospectTokenResponse.ExtraEntry
+	29, // 10: keycloak.v1.RegisterRequest.attributes:type_name -> keycloak.v1.RegisterRequest.AttributesEntry
+	31, // 11: keycloak.v1.RegisterResponse.created_timestamp:type_name -> google.protobuf.Timestamp
+	31, // 12: keycloak.v1.HealthCheckResponse.timestamp:type_name -> google.protobuf.Timestamp
+	30, // 13: keycloak.v1.HealthCheckResponse.dependencies:type_name -> keycloak.v1.HealthCheckResponse.DependenciesEntry
 	1,  // 14: keycloak.v1.KeycloakService.CreateUser:input_type -> keycloak.v1.CreateUserRequest
 	6,  // 15: keycloak.v1.KeycloakService.GetUser:input_type -> keycloak.v1.GetUserRequest
 	8,  // 16: keycloak.v1.KeycloakService.UpdateUser:input_type -> keycloak.v1.UpdateUserRequest
@@ -2382,25 +2562,27 @@ var file_keycloak_v1_keycloak_proto_depIdxs = []int32{
 	5,  // 20: keycloak.v1.KeycloakService.Logout:input_type -> keycloak.v1.LogoutRequest
 	19, // 21: keycloak.v1.KeycloakService.Register:input_type -> keycloak.v1.RegisterRequest
 	21, // 22: keycloak.v1.KeycloakService.ResetPassword:input_type -> keycloak.v1.ResetPasswordRequest
-	13, // 23: keycloak.v1.KeycloakService.IntrospectToken:input_type -> keycloak.v1.IntrospectTokenRequest
-	15, // 24: keycloak.v1.KeycloakService.RefreshToken:input_type -> keycloak.v1.RefreshTokenRequest
-	17, // 25: keycloak.v1.KeycloakService.VerifyToken:input_type -> keycloak.v1.VerifyTokenRequest
-	30, // 26: keycloak.v1.KeycloakService.HealthCheck:input_type -> google.protobuf.Empty
-	2,  // 27: keycloak.v1.KeycloakService.CreateUser:output_type -> keycloak.v1.CreateUserResponse
-	7,  // 28: keycloak.v1.KeycloakService.GetUser:output_type -> keycloak.v1.GetUserResponse
-	9,  // 29: keycloak.v1.KeycloakService.UpdateUser:output_type -> keycloak.v1.UpdateUserResponse
-	30, // 30: keycloak.v1.KeycloakService.DeleteUser:output_type -> google.protobuf.Empty
-	12, // 31: keycloak.v1.KeycloakService.ListUsers:output_type -> keycloak.v1.ListUsersResponse
-	4,  // 32: keycloak.v1.KeycloakService.Login:output_type -> keycloak.v1.LoginResponse
-	30, // 33: keycloak.v1.KeycloakService.Logout:output_type -> google.protobuf.Empty
-	20, // 34: keycloak.v1.KeycloakService.Register:output_type -> keycloak.v1.RegisterResponse
-	30, // 35: keycloak.v1.KeycloakService.ResetPassword:output_type -> google.protobuf.Empty
-	14, // 36: keycloak.v1.KeycloakService.IntrospectToken:output_type -> keycloak.v1.IntrospectTokenResponse
-	16, // 37: keycloak.v1.KeycloakService.RefreshToken:output_type -> keycloak.v1.RefreshTokenResponse
-	18, // 38: keycloak.v1.KeycloakService.VerifyToken:output_type -> keycloak.v1.VerifyTokenResponse
-	22, // 39: keycloak.v1.KeycloakService.HealthCheck:output_type -> keycloak.v1.HealthCheckResponse
-	27, // [27:40] is the sub-list for method output_type
-	14, // [14:27] is the sub-list for method input_type
+	22, // 23: keycloak.v1.KeycloakService.ImpersonateUser:input_type -> keycloak.v1.ImpersonateUserRequest
+	13, // 24: keycloak.v1.KeycloakService.IntrospectToken:input_type -> keycloak.v1.IntrospectTokenRequest
+	15, // 25: keycloak.v1.KeycloakService.RefreshToken:input_type -> keycloak.v1.RefreshTokenRequest
+	17, // 26: keycloak.v1.KeycloakService.VerifyToken:input_type -> keycloak.v1.VerifyTokenRequest
+	32, // 27: keycloak.v1.KeycloakService.HealthCheck:input_type -> google.protobuf.Empty
+	2,  // 28: keycloak.v1.KeycloakService.CreateUser:output_type -> keycloak.v1.CreateUserResponse
+	7,  // 29: keycloak.v1.KeycloakService.GetUser:output_type -> keycloak.v1.GetUserResponse
+	9,  // 30: keycloak.v1.KeycloakService.UpdateUser:output_type -> keycloak.v1.UpdateUserResponse
+	32, // 31: keycloak.v1.KeycloakService.DeleteUser:output_type -> google.protobuf.Empty
+	12, // 32: keycloak.v1.KeycloakService.ListUsers:output_type -> keycloak.v1.ListUsersResponse
+	4,  // 33: keycloak.v1.KeycloakService.Login:output_type -> keycloak.v1.LoginResponse
+	32, // 34: keycloak.v1.KeycloakService.Logout:output_type -> google.protobuf.Empty
+	20, // 35: keycloak.v1.KeycloakService.Register:output_type -> keycloak.v1.RegisterResponse
+	32, // 36: keycloak.v1.KeycloakService.ResetPassword:output_type -> google.protobuf.Empty
+	23, // 37: keycloak.v1.KeycloakService.ImpersonateUser:output_type -> keycloak.v1.ImpersonateUserResponse
+	14, // 38: keycloak.v1.KeycloakService.IntrospectToken:output_type -> keycloak.v1.IntrospectTokenResponse
+	16, // 39: keycloak.v1.KeycloakService.RefreshToken:output_type -> keycloak.v1.RefreshTokenResponse
+	18, // 40: keycloak.v1.KeycloakService.VerifyToken:output_type -> keycloak.v1.VerifyTokenResponse
+	24, // 41: keycloak.v1.KeycloakService.HealthCheck:output_type -> keycloak.v1.HealthCheckResponse
+	28, // [28:42] is the sub-list for method output_type
+	14, // [14:28] is the sub-list for method input_type
 	14, // [14:14] is the sub-list for extension type_name
 	14, // [14:14] is the sub-list for extension extendee
 	0,  // [0:14] is the sub-list for field type_name
@@ -2417,7 +2599,7 @@ func file_keycloak_v1_keycloak_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_keycloak_v1_keycloak_proto_rawDesc), len(file_keycloak_v1_keycloak_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   29,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

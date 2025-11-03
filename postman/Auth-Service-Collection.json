@@ -44,6 +44,77 @@
 					"response": []
 				},
 				{
+					"name": "Impersonate User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response has access token\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('access_token');",
+									"    pm.expect(jsonData.access_token).to.not.be.empty;",
+									"    ",
+									"    // Store the impersonated token for future requests",
+									"    pm.environment.set('impersonated_access_token', jsonData.access_token);",
+									"    if (jsonData.refresh_token) {",
+									"        pm.environment.set('impersonated_refresh_token', jsonData.refresh_token);",
+									"    }",
+									"});",
+									"",
+									"pm.test(\"Response has token type\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('token_type');",
+									"    pm.expect(jsonData.token_type).to.equal('Bearer');",
+									"});",
+									"",
+									"pm.test(\"Response has expires_in\", function () {",
+									"    const jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('expires_in');",
+									"    pm.expect(jsonData.expires_in).to.be.a('number');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							},
+							{
+								"key": "X-Client-Id",
+								"value": "{{keycloak_client_id}}"
+							},
+							{
+								"key": "X-Client-Secret",
+								"value": "{{keycloak_client_secret}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"target_user_id\": \"{{target_user_id}}\",\n    \"target_client_id\": \"{{keycloak_client_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/impersonate",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "impersonate"]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "Logout",
 					"request": {
 						"method": "POST",

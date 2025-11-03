@@ -29,6 +29,7 @@ const (
 	KeycloakService_Logout_FullMethodName          = "/keycloak.v1.KeycloakService/Logout"
 	KeycloakService_Register_FullMethodName        = "/keycloak.v1.KeycloakService/Register"
 	KeycloakService_ResetPassword_FullMethodName   = "/keycloak.v1.KeycloakService/ResetPassword"
+	KeycloakService_ImpersonateUser_FullMethodName = "/keycloak.v1.KeycloakService/ImpersonateUser"
 	KeycloakService_IntrospectToken_FullMethodName = "/keycloak.v1.KeycloakService/IntrospectToken"
 	KeycloakService_RefreshToken_FullMethodName    = "/keycloak.v1.KeycloakService/RefreshToken"
 	KeycloakService_VerifyToken_FullMethodName     = "/keycloak.v1.KeycloakService/VerifyToken"
@@ -52,6 +53,7 @@ type KeycloakServiceClient interface {
 	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	ResetPassword(ctx context.Context, in *ResetPasswordRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ImpersonateUser(ctx context.Context, in *ImpersonateUserRequest, opts ...grpc.CallOption) (*ImpersonateUserResponse, error)
 	// Token Operations
 	IntrospectToken(ctx context.Context, in *IntrospectTokenRequest, opts ...grpc.CallOption) (*IntrospectTokenResponse, error)
 	RefreshToken(ctx context.Context, in *RefreshTokenRequest, opts ...grpc.CallOption) (*RefreshTokenResponse, error)
@@ -158,6 +160,16 @@ func (c *keycloakServiceClient) ResetPassword(ctx context.Context, in *ResetPass
 	return out, nil
 }
 
+func (c *keycloakServiceClient) ImpersonateUser(ctx context.Context, in *ImpersonateUserRequest, opts ...grpc.CallOption) (*ImpersonateUserResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ImpersonateUserResponse)
+	err := c.cc.Invoke(ctx, KeycloakService_ImpersonateUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *keycloakServiceClient) IntrospectToken(ctx context.Context, in *IntrospectTokenRequest, opts ...grpc.CallOption) (*IntrospectTokenResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(IntrospectTokenResponse)
@@ -215,6 +227,7 @@ type KeycloakServiceServer interface {
 	Logout(context.Context, *LogoutRequest) (*emptypb.Empty, error)
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	ResetPassword(context.Context, *ResetPasswordRequest) (*emptypb.Empty, error)
+	ImpersonateUser(context.Context, *ImpersonateUserRequest) (*ImpersonateUserResponse, error)
 	// Token Operations
 	IntrospectToken(context.Context, *IntrospectTokenRequest) (*IntrospectTokenResponse, error)
 	RefreshToken(context.Context, *RefreshTokenRequest) (*RefreshTokenResponse, error)
@@ -257,6 +270,9 @@ func (UnimplementedKeycloakServiceServer) Register(context.Context, *RegisterReq
 }
 func (UnimplementedKeycloakServiceServer) ResetPassword(context.Context, *ResetPasswordRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetPassword not implemented")
+}
+func (UnimplementedKeycloakServiceServer) ImpersonateUser(context.Context, *ImpersonateUserRequest) (*ImpersonateUserResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ImpersonateUser not implemented")
 }
 func (UnimplementedKeycloakServiceServer) IntrospectToken(context.Context, *IntrospectTokenRequest) (*IntrospectTokenResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method IntrospectToken not implemented")
@@ -453,6 +469,24 @@ func _KeycloakService_ResetPassword_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _KeycloakService_ImpersonateUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ImpersonateUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KeycloakServiceServer).ImpersonateUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KeycloakService_ImpersonateUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KeycloakServiceServer).ImpersonateUser(ctx, req.(*ImpersonateUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _KeycloakService_IntrospectToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(IntrospectTokenRequest)
 	if err := dec(in); err != nil {
@@ -567,6 +601,10 @@ var KeycloakService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResetPassword",
 			Handler:    _KeycloakService_ResetPassword_Handler,
+		},
+		{
+			MethodName: "ImpersonateUser",
+			Handler:    _KeycloakService_ImpersonateUser_Handler,
 		},
 		{
 			MethodName: "IntrospectToken",

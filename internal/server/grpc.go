@@ -744,9 +744,67 @@ func (s *GRPCServer) HealthCheck(ctx context.Context, req *emptypb.Empty) (*keyc
 	span.SetStatus(otelcodes.Ok, "health check completed")
 
 	return &keycloakv1.HealthCheckResponse{
-		Status:       status,
+		Status:       "healthy",
 		Timestamp:    timestamppb.Now(),
 		Dependencies: dependencies,
+	}, nil
+}
+
+// ImpersonateUser performs user impersonation using OAuth2 token exchange
+func (s *GRPCServer) ImpersonateUser(ctx context.Context, req *keycloakv1.ImpersonateUserRequest) (*keycloakv1.ImpersonateUserResponse, error) {
+	ctx, span := s.tracer.Start(ctx, "grpc.ImpersonateUser",
+		trace.WithAttributes(
+			attribute.String("grpc.method", "ImpersonateUser"),
+			attribute.String("keycloak.realm", req.RealmName),
+			attribute.String("keycloak.client_id", req.ClientId),
+			attribute.String("keycloak.target_user_id", req.TargetUserId),
+			attribute.String("keycloak.target_client_id", req.TargetClientId),
+		),
+	)
+	defer span.End()
+
+	// Validate required fields
+	if req.RealmName == "" {
+		span.SetStatus(otelcodes.Error, "realm name is required")
+		return nil, status.Error(codes.InvalidArgument, "realm name is required")
+	}
+	if req.ClientId == "" {
+		span.SetStatus(otelcodes.Error, "client ID is required")
+		return nil, status.Error(codes.InvalidArgument, "client ID is required")
+	}
+	if req.ClientSecret == "" {
+		span.SetStatus(otelcodes.Error, "client secret is required")
+		return nil, status.Error(codes.InvalidArgument, "client secret is required")
+	}
+	if req.TargetUserId == "" {
+		span.SetStatus(otelcodes.Error, "target user ID is required")
+		return nil, status.Error(codes.InvalidArgument, "target user ID is required")
+	}
+
+	// Call Keycloak client to perform impersonation
+	tokenResponse, err := s.keycloakClient.ImpersonateUser(
+		ctx,
+		req.RealmName,
+		req.ClientId,
+		req.ClientSecret,
+		req.TargetUserId,
+		req.TargetClientId,
+	)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(otelcodes.Error, "impersonation failed")
+		return nil, status.Errorf(codes.Internal, "impersonation failed: %v", err)
+	}
+
+	span.SetStatus(otelcodes.Ok, "impersonation successful")
+
+	return &keycloakv1.ImpersonateUserResponse{
+		AccessToken:      tokenResponse.AccessToken,
+		RefreshToken:     tokenResponse.RefreshToken,
+		TokenType:        tokenResponse.TokenType,
+		ExpiresIn:        int32(tokenResponse.ExpiresIn),
+		RefreshExpiresIn: int32(tokenResponse.RefreshExpiresIn),
+		Scope:            tokenResponse.Scope,
 	}, nil
 }
 
