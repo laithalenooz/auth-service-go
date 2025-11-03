@@ -1144,7 +1144,7 @@ func (c *Client) VerifyToken(ctx context.Context, realm, token, clientID, client
 	return &introspection, nil
 }
 
-// ImpersonateUser performs user impersonation using OAuth2 token exchange
+// ImpersonateUser performs user impersonation using Keycloak's token exchange with admin token
 func (c *Client) ImpersonateUser(ctx context.Context, realm, clientID, clientSecret, targetUserID, targetClientID string) (*TokenResponse, error) {
 	ctx, span := c.tracer.Start(ctx, "keycloak.impersonate_user",
 		trace.WithAttributes(
@@ -1156,17 +1156,25 @@ func (c *Client) ImpersonateUser(ctx context.Context, realm, clientID, clientSec
 	)
 	defer span.End()
 
-	// Construct token endpoint URL
+	// Ensure we have admin token for the realm
+	if err := c.ensureAdminToken(ctx, realm, clientID, clientSecret); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get admin token")
+		return nil, fmt.Errorf("failed to get admin token: %w", err)
+	}
+
+	// Use token exchange with admin token as subject_token (matching your PHP approach)
 	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", c.baseURL, realm)
 
-	// Prepare form data for OAuth2 token exchange
+	// Prepare form data exactly like your PHP implementation
 	data := url.Values{}
+	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
 	data.Set("client_id", clientID)
 	data.Set("client_secret", clientSecret)
-	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
 	data.Set("requested_subject", targetUserID)
+	data.Set("subject_token", c.adminToken.AccessToken)
 	
-	// Add target client ID as audience if provided
+	// Add audience if target client is specified
 	if targetClientID != "" {
 		data.Set("audience", targetClientID)
 	}
@@ -1203,6 +1211,13 @@ func (c *Client) ImpersonateUser(ctx context.Context, realm, clientID, clientSec
 
 	if resp.StatusCode != http.StatusOK {
 		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		
+		// Log the request details for debugging
+		span.SetAttributes(
+			attribute.String("request.body", data.Encode()),
+			attribute.String("response.body", string(body)),
+		)
+		
 		return nil, fmt.Errorf("failed to impersonate user: HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
