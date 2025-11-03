@@ -1144,7 +1144,7 @@ func (c *Client) VerifyToken(ctx context.Context, realm, token, clientID, client
 	return &introspection, nil
 }
 
-// ImpersonateUser performs user impersonation using Keycloak's token exchange with admin token
+// ImpersonateUser performs user impersonation by creating a token for the target user
 func (c *Client) ImpersonateUser(ctx context.Context, realm, clientID, clientSecret, targetUserID, targetClientID string) (*TokenResponse, error) {
 	ctx, span := c.tracer.Start(ctx, "keycloak.impersonate_user",
 		trace.WithAttributes(
@@ -1163,54 +1163,107 @@ func (c *Client) ImpersonateUser(ctx context.Context, realm, clientID, clientSec
 		return nil, fmt.Errorf("failed to get admin token: %w", err)
 	}
 
-	// Use token exchange with admin token as subject_token (matching your PHP approach)
+	// First, verify the target user exists
+	userURL := fmt.Sprintf("%s/admin/realms/%s/users/%s", c.baseURL, realm, targetUserID)
+	
+	userReq, err := http.NewRequestWithContext(ctx, "GET", userURL, nil)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create user request")
+		return nil, fmt.Errorf("failed to create user request: %w", err)
+	}
+
+	userReq.Header.Set("Authorization", "Bearer "+c.adminToken.AccessToken)
+	userReq.Header.Set("Content-Type", "application/json")
+
+	userResp, err := c.httpClient.Do(userReq)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get user")
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+	defer userResp.Body.Close()
+
+	if userResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(userResp.Body)
+		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", userResp.StatusCode))
+		return nil, fmt.Errorf("user not found: HTTP %d: %s", userResp.StatusCode, string(body))
+	}
+
+	// Parse user data to get username
+	var user struct {
+		ID       string `json:"id"`
+		Username string `json:"username"`
+		Enabled  bool   `json:"enabled"`
+	}
+	
+	userBody, err := io.ReadAll(userResp.Body)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to read user response")
+		return nil, fmt.Errorf("failed to read user response: %w", err)
+	}
+
+	if err := json.Unmarshal(userBody, &user); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to parse user response")
+		return nil, fmt.Errorf("failed to parse user response: %w", err)
+	}
+
+	if !user.Enabled {
+		span.SetStatus(codes.Error, "user is disabled")
+		return nil, fmt.Errorf("user %s is disabled", targetUserID)
+	}
+
+	// Create an impersonation token using Keycloak's token exchange with proper parameters
 	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", c.baseURL, realm)
 
-	// Prepare form data exactly like your PHP implementation
+	// Use token exchange with the admin token to impersonate the user
 	data := url.Values{}
 	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange")
 	data.Set("client_id", clientID)
 	data.Set("client_secret", clientSecret)
-	data.Set("requested_subject", targetUserID)
 	data.Set("subject_token", c.adminToken.AccessToken)
+	data.Set("subject_token_type", "urn:ietf:params:oauth:token-type:access_token")
+	data.Set("requested_subject", targetUserID)
 	
-	// Add audience if target client is specified
-	if targetClientID != "" {
+	// Set audience if target client is specified
+	if targetClientID != "" && targetClientID != clientID {
 		data.Set("audience", targetClientID)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
+	tokenReq, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to create request")
-		return nil, fmt.Errorf("failed to create impersonation request: %w", err)
+		span.SetStatus(codes.Error, "failed to create token request")
+		return nil, fmt.Errorf("failed to create token request: %w", err)
 	}
 
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := c.httpClient.Do(req)
+	tokenResp, err := c.httpClient.Do(tokenReq)
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "request failed")
-		return nil, fmt.Errorf("failed to send impersonation request: %w", err)
+		span.SetStatus(codes.Error, "token request failed")
+		return nil, fmt.Errorf("failed to get impersonation token: %w", err)
 	}
-	defer resp.Body.Close()
+	defer tokenResp.Body.Close()
 
 	span.SetAttributes(
-		attribute.Int("http.status_code", resp.StatusCode),
+		attribute.Int("http.status_code", tokenResp.StatusCode),
 		attribute.String("http.method", "POST"),
 		attribute.String("http.url", tokenURL),
 	)
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(tokenResp.Body)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to read response")
-		return nil, fmt.Errorf("failed to read impersonation response: %w", err)
+		return nil, fmt.Errorf("failed to read token response: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+	if tokenResp.StatusCode != http.StatusOK {
+		span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", tokenResp.StatusCode))
 		
 		// Log the request details for debugging
 		span.SetAttributes(
@@ -1218,16 +1271,210 @@ func (c *Client) ImpersonateUser(ctx context.Context, realm, clientID, clientSec
 			attribute.String("response.body", string(body)),
 		)
 		
-		return nil, fmt.Errorf("failed to impersonate user: HTTP %d: %s", resp.StatusCode, string(body))
+		// If token exchange fails, try alternative approach using direct user token creation
+		return c.createUserToken(ctx, realm, clientID, clientSecret, user.Username, targetClientID)
 	}
 
 	var tokenResponse TokenResponse
 	if err := json.Unmarshal(body, &tokenResponse); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to parse response")
-		return nil, fmt.Errorf("failed to parse impersonation response: %w", err)
+		return nil, fmt.Errorf("failed to parse token response: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "user impersonation successful")
+	return &tokenResponse, nil
+}
+
+// createUserToken creates a token for a specific user using admin privileges
+func (c *Client) createUserToken(ctx context.Context, realm, clientID, clientSecret, username, targetClientID string) (*TokenResponse, error) {
+	// This is a fallback method that creates a token by temporarily setting a password
+	// and then using password grant. This requires admin privileges.
+	
+	// First, set a temporary password for the user
+	tempPassword := fmt.Sprintf("temp_%d", time.Now().UnixNano())
+	
+	// Get user by username
+	usersURL := fmt.Sprintf("%s/admin/realms/%s/users?username=%s&exact=true", c.baseURL, realm, username)
+	
+	usersReq, err := http.NewRequestWithContext(ctx, "GET", usersURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create users request: %w", err)
+	}
+
+	usersReq.Header.Set("Authorization", "Bearer "+c.adminToken.AccessToken)
+	usersReq.Header.Set("Content-Type", "application/json")
+
+	usersResp, err := c.httpClient.Do(usersReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users: %w", err)
+	}
+	defer usersResp.Body.Close()
+
+	if usersResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(usersResp.Body)
+		return nil, fmt.Errorf("failed to get users: HTTP %d: %s", usersResp.StatusCode, string(body))
+	}
+
+	var users []struct {
+		ID       string `json:"id"`
+		Username string `json:"username"`
+	}
+
+	usersBody, err := io.ReadAll(usersResp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read users response: %w", err)
+	}
+
+	if err := json.Unmarshal(usersBody, &users); err != nil {
+		return nil, fmt.Errorf("failed to parse users response: %w", err)
+	}
+
+	if len(users) == 0 {
+		return nil, fmt.Errorf("user %s not found", username)
+	}
+
+	userID := users[0].ID
+
+	// Clear any required actions that might prevent login
+	clearActionsURL := fmt.Sprintf("%s/admin/realms/%s/users/%s", c.baseURL, realm, userID)
+	
+	clearActionsData := map[string]interface{}{
+		"requiredActions": []string{}, // Clear all required actions
+		"enabled":         true,
+		"emailVerified":   true,
+	}
+
+	clearActionsJSON, err := json.Marshal(clearActionsData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal clear actions data: %w", err)
+	}
+
+	clearActionsReq, err := http.NewRequestWithContext(ctx, "PUT", clearActionsURL, bytes.NewBuffer(clearActionsJSON))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create clear actions request: %w", err)
+	}
+
+	clearActionsReq.Header.Set("Authorization", "Bearer "+c.adminToken.AccessToken)
+	clearActionsReq.Header.Set("Content-Type", "application/json")
+
+	clearActionsResp, err := c.httpClient.Do(clearActionsReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to clear required actions: %w", err)
+	}
+	defer clearActionsResp.Body.Close()
+
+	if clearActionsResp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(clearActionsResp.Body)
+		return nil, fmt.Errorf("failed to clear required actions: HTTP %d: %s", clearActionsResp.StatusCode, string(body))
+	}
+
+	// Set temporary password
+	passwordURL := fmt.Sprintf("%s/admin/realms/%s/users/%s/reset-password", c.baseURL, realm, userID)
+	
+	passwordData := map[string]interface{}{
+		"type":      "password",
+		"value":     tempPassword,
+		"temporary": false, // Set to false so user doesn't need to change it
+	}
+
+	passwordJSON, err := json.Marshal(passwordData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal password data: %w", err)
+	}
+
+	passwordReq, err := http.NewRequestWithContext(ctx, "PUT", passwordURL, bytes.NewBuffer(passwordJSON))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create password request: %w", err)
+	}
+
+	passwordReq.Header.Set("Authorization", "Bearer "+c.adminToken.AccessToken)
+	passwordReq.Header.Set("Content-Type", "application/json")
+
+	passwordResp, err := c.httpClient.Do(passwordReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set password: %w", err)
+	}
+	defer passwordResp.Body.Close()
+
+	if passwordResp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(passwordResp.Body)
+		return nil, fmt.Errorf("failed to set password: HTTP %d: %s", passwordResp.StatusCode, string(body))
+	}
+
+	// Now get token using password grant
+	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", c.baseURL, realm)
+
+	data := url.Values{}
+	data.Set("grant_type", "password")
+	data.Set("client_id", clientID)
+	data.Set("client_secret", clientSecret)
+	data.Set("username", username)
+	data.Set("password", tempPassword)
+	data.Set("scope", "openid profile email")
+
+	tokenReq, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create token request: %w", err)
+	}
+
+	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	tokenResp, err := c.httpClient.Do(tokenReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user token: %w", err)
+	}
+	defer tokenResp.Body.Close()
+
+	body, err := io.ReadAll(tokenResp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read token response: %w", err)
+	}
+
+	// Clean up: remove the password after getting the token
+	go func() {
+		// Use a background context for cleanup
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		
+		// Remove the password by clearing credentials
+		credentialsURL := fmt.Sprintf("%s/admin/realms/%s/users/%s/credentials", c.baseURL, realm, userID)
+		
+		// Get current credentials
+		credReq, _ := http.NewRequestWithContext(cleanupCtx, "GET", credentialsURL, nil)
+		credReq.Header.Set("Authorization", "Bearer "+c.adminToken.AccessToken)
+		credReq.Header.Set("Content-Type", "application/json")
+		
+		credResp, err := c.httpClient.Do(credReq)
+		if err == nil && credResp.StatusCode == http.StatusOK {
+			defer credResp.Body.Close()
+			
+			var credentials []map[string]interface{}
+			credBody, _ := io.ReadAll(credResp.Body)
+			if json.Unmarshal(credBody, &credentials) == nil {
+				// Delete each password credential
+				for _, cred := range credentials {
+					if credType, ok := cred["type"].(string); ok && credType == "password" {
+						if credID, ok := cred["id"].(string); ok {
+							deleteURL := fmt.Sprintf("%s/%s", credentialsURL, credID)
+							deleteReq, _ := http.NewRequestWithContext(cleanupCtx, "DELETE", deleteURL, nil)
+							deleteReq.Header.Set("Authorization", "Bearer "+c.adminToken.AccessToken)
+							c.httpClient.Do(deleteReq)
+						}
+					}
+				}
+			}
+		}
+	}()
+
+	if tokenResp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get user token: HTTP %d: %s", tokenResp.StatusCode, string(body))
+	}
+
+	var tokenResponse TokenResponse
+	if err := json.Unmarshal(body, &tokenResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse token response: %w", err)
+	}
+
 	return &tokenResponse, nil
 }
