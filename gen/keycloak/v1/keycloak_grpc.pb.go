@@ -20,20 +20,21 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	KeycloakService_CreateUser_FullMethodName      = "/keycloak.v1.KeycloakService/CreateUser"
-	KeycloakService_GetUser_FullMethodName         = "/keycloak.v1.KeycloakService/GetUser"
-	KeycloakService_UpdateUser_FullMethodName      = "/keycloak.v1.KeycloakService/UpdateUser"
-	KeycloakService_DeleteUser_FullMethodName      = "/keycloak.v1.KeycloakService/DeleteUser"
-	KeycloakService_ListUsers_FullMethodName       = "/keycloak.v1.KeycloakService/ListUsers"
-	KeycloakService_Login_FullMethodName           = "/keycloak.v1.KeycloakService/Login"
-	KeycloakService_Logout_FullMethodName          = "/keycloak.v1.KeycloakService/Logout"
-	KeycloakService_Register_FullMethodName        = "/keycloak.v1.KeycloakService/Register"
-	KeycloakService_ResetPassword_FullMethodName   = "/keycloak.v1.KeycloakService/ResetPassword"
-	KeycloakService_ImpersonateUser_FullMethodName = "/keycloak.v1.KeycloakService/ImpersonateUser"
-	KeycloakService_IntrospectToken_FullMethodName = "/keycloak.v1.KeycloakService/IntrospectToken"
-	KeycloakService_RefreshToken_FullMethodName    = "/keycloak.v1.KeycloakService/RefreshToken"
-	KeycloakService_VerifyToken_FullMethodName     = "/keycloak.v1.KeycloakService/VerifyToken"
-	KeycloakService_HealthCheck_FullMethodName     = "/keycloak.v1.KeycloakService/HealthCheck"
+	KeycloakService_CreateUser_FullMethodName         = "/keycloak.v1.KeycloakService/CreateUser"
+	KeycloakService_GetUser_FullMethodName            = "/keycloak.v1.KeycloakService/GetUser"
+	KeycloakService_UpdateUser_FullMethodName         = "/keycloak.v1.KeycloakService/UpdateUser"
+	KeycloakService_DeleteUser_FullMethodName         = "/keycloak.v1.KeycloakService/DeleteUser"
+	KeycloakService_ListUsers_FullMethodName          = "/keycloak.v1.KeycloakService/ListUsers"
+	KeycloakService_Login_FullMethodName              = "/keycloak.v1.KeycloakService/Login"
+	KeycloakService_Logout_FullMethodName             = "/keycloak.v1.KeycloakService/Logout"
+	KeycloakService_Register_FullMethodName           = "/keycloak.v1.KeycloakService/Register"
+	KeycloakService_ResetPassword_FullMethodName      = "/keycloak.v1.KeycloakService/ResetPassword"
+	KeycloakService_ImpersonateUser_FullMethodName    = "/keycloak.v1.KeycloakService/ImpersonateUser"
+	KeycloakService_IntrospectToken_FullMethodName    = "/keycloak.v1.KeycloakService/IntrospectToken"
+	KeycloakService_RefreshToken_FullMethodName       = "/keycloak.v1.KeycloakService/RefreshToken"
+	KeycloakService_VerifyToken_FullMethodName        = "/keycloak.v1.KeycloakService/VerifyToken"
+	KeycloakService_HealthCheck_FullMethodName        = "/keycloak.v1.KeycloakService/HealthCheck"
+	KeycloakService_GetRealmPublicKeys_FullMethodName = "/keycloak.v1.KeycloakService/GetRealmPublicKeys"
 )
 
 // KeycloakServiceClient is the client API for KeycloakService service.
@@ -60,6 +61,8 @@ type KeycloakServiceClient interface {
 	VerifyToken(ctx context.Context, in *VerifyTokenRequest, opts ...grpc.CallOption) (*VerifyTokenResponse, error)
 	// Health Check
 	HealthCheck(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*HealthCheckResponse, error)
+	// Public Keys (JWKS)
+	GetRealmPublicKeys(ctx context.Context, in *GetRealmPublicKeysRequest, opts ...grpc.CallOption) (*GetRealmPublicKeysResponse, error)
 }
 
 type keycloakServiceClient struct {
@@ -210,6 +213,16 @@ func (c *keycloakServiceClient) HealthCheck(ctx context.Context, in *emptypb.Emp
 	return out, nil
 }
 
+func (c *keycloakServiceClient) GetRealmPublicKeys(ctx context.Context, in *GetRealmPublicKeysRequest, opts ...grpc.CallOption) (*GetRealmPublicKeysResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRealmPublicKeysResponse)
+	err := c.cc.Invoke(ctx, KeycloakService_GetRealmPublicKeys_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // KeycloakServiceServer is the server API for KeycloakService service.
 // All implementations must embed UnimplementedKeycloakServiceServer
 // for forward compatibility.
@@ -234,6 +247,8 @@ type KeycloakServiceServer interface {
 	VerifyToken(context.Context, *VerifyTokenRequest) (*VerifyTokenResponse, error)
 	// Health Check
 	HealthCheck(context.Context, *emptypb.Empty) (*HealthCheckResponse, error)
+	// Public Keys (JWKS)
+	GetRealmPublicKeys(context.Context, *GetRealmPublicKeysRequest) (*GetRealmPublicKeysResponse, error)
 	mustEmbedUnimplementedKeycloakServiceServer()
 }
 
@@ -285,6 +300,9 @@ func (UnimplementedKeycloakServiceServer) VerifyToken(context.Context, *VerifyTo
 }
 func (UnimplementedKeycloakServiceServer) HealthCheck(context.Context, *emptypb.Empty) (*HealthCheckResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HealthCheck not implemented")
+}
+func (UnimplementedKeycloakServiceServer) GetRealmPublicKeys(context.Context, *GetRealmPublicKeysRequest) (*GetRealmPublicKeysResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRealmPublicKeys not implemented")
 }
 func (UnimplementedKeycloakServiceServer) mustEmbedUnimplementedKeycloakServiceServer() {}
 func (UnimplementedKeycloakServiceServer) testEmbeddedByValue()                         {}
@@ -559,6 +577,24 @@ func _KeycloakService_HealthCheck_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _KeycloakService_GetRealmPublicKeys_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRealmPublicKeysRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KeycloakServiceServer).GetRealmPublicKeys(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KeycloakService_GetRealmPublicKeys_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KeycloakServiceServer).GetRealmPublicKeys(ctx, req.(*GetRealmPublicKeysRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // KeycloakService_ServiceDesc is the grpc.ServiceDesc for KeycloakService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -621,6 +657,10 @@ var KeycloakService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "HealthCheck",
 			Handler:    _KeycloakService_HealthCheck_Handler,
+		},
+		{
+			MethodName: "GetRealmPublicKeys",
+			Handler:    _KeycloakService_GetRealmPublicKeys_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

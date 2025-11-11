@@ -1,30 +1,31 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"log"
-	"net"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
+    "context"
+    "encoding/json"
+    "fmt"
+    "log"
+    "net"
+    "net/http"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+    "github.com/gin-gonic/gin"
+    "github.com/prometheus/client_golang/prometheus/promhttp"
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/credentials/insecure"
 
-	keycloakv1 "github.com/laithalenooz/auth-service-go/gen/keycloak/v1"
-	"github.com/laithalenooz/auth-service-go/internal/cache"
-	"github.com/laithalenooz/auth-service-go/internal/config"
-	"github.com/laithalenooz/auth-service-go/internal/health"
-	"github.com/laithalenooz/auth-service-go/internal/keycloak"
-	"github.com/laithalenooz/auth-service-go/internal/metrics"
-	"github.com/laithalenooz/auth-service-go/internal/middleware"
-	"github.com/laithalenooz/auth-service-go/internal/server"
-	"github.com/laithalenooz/auth-service-go/internal/telemetry"
+    keycloakv1 "github.com/laithalenooz/auth-service-go/gen/keycloak/v1"
+    "github.com/laithalenooz/auth-service-go/internal/cache"
+    "github.com/laithalenooz/auth-service-go/internal/config"
+    "github.com/laithalenooz/auth-service-go/internal/health"
+    "github.com/laithalenooz/auth-service-go/internal/keycloak"
+    "github.com/laithalenooz/auth-service-go/internal/metrics"
+    "github.com/laithalenooz/auth-service-go/internal/middleware"
+    "github.com/laithalenooz/auth-service-go/internal/server"
+    "github.com/laithalenooz/auth-service-go/internal/telemetry"
 )
 
 func main() {
@@ -298,28 +299,46 @@ func createHTTPRouter(cfg *config.Config, grpcPort int, healthService *health.He
 	// Metrics endpoint for Prometheus
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// API routes that proxy to gRPC
-	api := router.Group("/api/v1")
-	{
-		// Authentication endpoints
-		api.POST("/auth/login", loginHandler(grpcPort))
-		api.POST("/auth/logout", logoutHandler(grpcPort))
-		api.POST("/auth/register", registerHandler(grpcPort))
-		api.POST("/auth/reset-password", resetPasswordHandler(grpcPort))
-		api.POST("/auth/impersonate", impersonateUserHandler(grpcPort))
+    // API routes that proxy to gRPC
+    api := router.Group("/api/v1")
+    {
+        // Authentication endpoints
+        api.POST("/auth/login", loginHandler(grpcPort))
+        api.POST("/auth/logout", logoutHandler(grpcPort))
+        api.POST("/auth/register", registerHandler(grpcPort))
+        api.POST("/auth/reset-password", resetPasswordHandler(grpcPort))
+        api.POST("/auth/impersonate", impersonateUserHandler(grpcPort))
 
-		// User management endpoints
-		api.POST("/users", createUserHandler(grpcPort))
-		api.GET("/users/:id", getUserHandler(grpcPort))
-		api.PUT("/users/:id", updateUserHandler(grpcPort))
-		api.DELETE("/users/:id", deleteUserHandler(grpcPort))
-		api.GET("/users", listUsersHandler(grpcPort))
+        // Realm public keys (JWKS) via gRPC
+        api.GET("/realm/public-keys", getRealmPublicKeysHandler(grpcPort))
 
-		// Token endpoints
-		api.POST("/tokens/introspect", introspectTokenHandler(grpcPort))
-		api.POST("/tokens/refresh", refreshTokenHandler(grpcPort))
-		api.POST("/tokens/verify", verifyTokenHandler(grpcPort))
-	}
+        // User management endpoints
+        api.POST("/users", createUserHandler(grpcPort))
+        api.GET("/users/:id", getUserHandler(grpcPort))
+        api.PUT("/users/:id", updateUserHandler(grpcPort))
+        api.DELETE("/users/:id", deleteUserHandler(grpcPort))
+        api.GET("/users", listUsersHandler(grpcPort))
+
+        // Authenticated user profile update: /api/v1/users/me
+        // Initialize auth middleware with Keycloak and Redis clients
+        kcClient := keycloak.NewClient(&cfg.Keycloak, appMetrics)
+        cacheClient, err := cache.NewClient(&cfg.Redis)
+        if err == nil {
+            authMw := middleware.NewAuthMiddleware(cfg, kcClient, cacheClient)
+            authGroup := api.Group("")
+            authGroup.Use(authMw.RequireAuth())
+            authGroup.PUT("/users/me", updateProfileHandler(grpcPort))
+        } else {
+            // Fallback: if cache is not available, still expose endpoint without auth setup
+            // Clients will receive 401 due to missing Authorization header handled in the handler
+            api.PUT("/users/me", updateProfileHandler(grpcPort))
+        }
+
+        // Token endpoints
+        api.POST("/tokens/introspect", introspectTokenHandler(grpcPort))
+        api.POST("/tokens/refresh", refreshTokenHandler(grpcPort))
+        api.POST("/tokens/verify", verifyTokenHandler(grpcPort))
+    }
 
 	return router
 }
@@ -340,13 +359,13 @@ func createGRPCClient(grpcPort int) (keycloakv1.KeycloakServiceClient, *grpc.Cli
 
 // HTTP handlers that proxy to gRPC
 func createUserHandler(grpcPort int) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		client, conn, err := createGRPCClient(grpcPort)
-		if err != nil {
-			c.JSON(500, gin.H{"error": "Failed to connect to gRPC server"})
-			return
-		}
-		defer conn.Close()
+    return func(c *gin.Context) {
+        client, conn, err := createGRPCClient(grpcPort)
+        if err != nil {
+            c.JSON(500, gin.H{"error": "Failed to connect to gRPC server"})
+            return
+        }
+        defer conn.Close()
 
 		// Extract realm and client parameters from headers
 		realmName := c.GetHeader("X-Realm-Name")
@@ -359,16 +378,33 @@ func createUserHandler(grpcPort int) gin.HandlerFunc {
 			return
 		}
 
-		var req keycloakv1.CreateUserRequest
-		if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
-			c.JSON(400, gin.H{"error": bindErr.Error()})
-			return
-		}
+        // Read raw body to support extra top-level field "type" and map it into attributes
+        raw, err := c.GetRawData()
+        if err != nil {
+            c.JSON(400, gin.H{"error": fmt.Sprintf("failed to read request body: %v", err)})
+            return
+        }
+        var req keycloakv1.CreateUserRequest
+        if err := json.Unmarshal(raw, &req); err != nil {
+            c.JSON(400, gin.H{"error": fmt.Sprintf("invalid JSON: %v", err)})
+            return
+        }
+        // Extract optional top-level field "type" and inject into attributes
+        var extra struct {
+            Type string `json:"type"`
+        }
+        _ = json.Unmarshal(raw, &extra)
+        if extra.Type != "" {
+            if req.Attributes == nil {
+                req.Attributes = make(map[string]string)
+            }
+            req.Attributes["type"] = extra.Type
+        }
 
-		// Set realm and client parameters from headers
-		req.RealmName = realmName
-		req.ClientId = clientID
-		req.ClientSecret = clientSecret
+        // Set realm and client parameters from headers
+        req.RealmName = realmName
+        req.ClientId = clientID
+        req.ClientSecret = clientSecret
 
 		resp, err := client.CreateUser(c.Request.Context(), &req)
 		if err != nil {
@@ -377,7 +413,86 @@ func createUserHandler(grpcPort int) gin.HandlerFunc {
 		}
 
 		c.JSON(201, resp)
-	}
+    }
+}
+
+// updateProfileHandler allows the authenticated user to update their own profile
+func updateProfileHandler(grpcPort int) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        client, conn, err := createGRPCClient(grpcPort)
+        if err != nil {
+            c.JSON(500, gin.H{"error": "Failed to connect to gRPC server"})
+            return
+        }
+        defer conn.Close()
+
+        // Extract realm and client parameters from headers
+        realmName := c.GetHeader("X-Realm-Name")
+        clientID := c.GetHeader("X-Client-Id")
+        clientSecret := c.GetHeader("X-Client-Secret")
+
+        // Validate required parameters
+        if realmName == "" || clientID == "" || clientSecret == "" {
+            c.JSON(400, gin.H{"error": "X-Realm-Name, X-Client-Id, and X-Client-Secret headers are required"})
+            return
+        }
+
+        // Get authenticated user ID from context (set by AuthMiddleware)
+        userID, ok := middleware.GetUserID(c)
+        if !ok || userID == "" {
+            c.JSON(401, gin.H{"error": "Unauthorized: missing or invalid user context"})
+            return
+        }
+
+        // Bind update payload
+        var req keycloakv1.UpdateUserRequest
+        if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
+            c.JSON(400, gin.H{"error": bindErr.Error()})
+            return
+        }
+
+        // Set realm, client, and user parameters
+        req.RealmName = realmName
+        req.ClientId = clientID
+        req.ClientSecret = clientSecret
+        req.UserId = userID
+
+        resp, err := client.UpdateUser(c.Request.Context(), &req)
+        if err != nil {
+            c.JSON(500, gin.H{"error": err.Error()})
+            return
+        }
+
+        c.JSON(200, resp)
+    }
+}
+
+// getRealmPublicKeysHandler proxies JWKS request to gRPC
+func getRealmPublicKeysHandler(grpcPort int) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        client, conn, err := createGRPCClient(grpcPort)
+        if err != nil {
+            c.JSON(500, gin.H{"error": "Failed to connect to gRPC server"})
+            return
+        }
+        defer conn.Close()
+
+        realmName := c.GetHeader("X-Realm-Name")
+        if realmName == "" {
+            c.JSON(400, gin.H{"error": "X-Realm-Name header is required"})
+            return
+        }
+
+        resp, err := client.GetRealmPublicKeys(c.Request.Context(), &keycloakv1.GetRealmPublicKeysRequest{
+            RealmName: realmName,
+        })
+        if err != nil {
+            c.JSON(500, gin.H{"error": err.Error()})
+            return
+        }
+
+        c.JSON(200, resp.Jwks)
+    }
 }
 
 func getUserHandler(grpcPort int) gin.HandlerFunc {

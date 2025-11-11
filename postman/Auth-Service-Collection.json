@@ -170,16 +170,33 @@
 								"value": "{{keycloak_client_secret}}"
 							}
 						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"username\": \"newuser\",\n    \"email\": \"newuser@example.com\",\n    \"first_name\": \"New\",\n    \"last_name\": \"User\",\n    \"password\": \"password123\",\n    \"email_verified\": false,\n    \"attributes\": {\n        \"department\": \"IT\"\n    }\n}"
-						},
+					"body": {
+						"mode": "raw",
+						"raw": "{\n    \"username\": \"newuser\",\n    \"email\": \"newuser@example.com\",\n    \"first_name\": \"New\",\n    \"last_name\": \"User\",\n    \"password\": \"password123\",\n    \"email_verified\": false,\n    \"type\": \"customer\",\n    \"attributes\": {\n        \"department\": \"IT\"\n    }\n}"
+					},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/register",
 							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "auth", "register"]
+						"path": ["api", "v1", "auth", "register"]
 						}
 					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Registration returns type and attributes', function () {",
+									"  pm.response.to.have.status(200);",
+									"  const res = pm.response.json();",
+									"  pm.expect(res).to.have.property('type');",
+									"  pm.expect(res).to.have.property('attributes');",
+									"  pm.expect(res.attributes).to.have.property('type');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"response": []
 				},
 				{
@@ -325,6 +342,25 @@
 					},
 					"response": []
 				}
+				,
+				{
+					"name": "Realm Public Keys (JWKS)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Realm-Name",
+								"value": "{{keycloak_realm}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/realm/public-keys",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "realm", "public-keys"]
+						}
+					},
+					"response": []
+				}
 			]
 		},
 		{
@@ -339,10 +375,11 @@
 								"exec": [
 									"if (pm.response.code === 201) {",
 									"    const response = pm.response.json();",
-									"    pm.collectionVariables.set('created_user_id', response.id);",
+									"    const user = response.user ? response.user : response;",
+									"    pm.collectionVariables.set('created_user_id', user.id);",
 									"    pm.test('User created successfully', function () {",
-									"        pm.expect(response.id).to.not.be.empty;",
-									"        pm.expect(response.username).to.eql(pm.variables.get('test_username'));",
+									"        pm.expect(user.id).to.not.be.empty;",
+									"        pm.expect(user.username).to.eql(pm.variables.get('test_username'));",
 									"    });",
 									"} else {",
 									"    pm.test('User creation failed', function () {",
@@ -386,10 +423,10 @@
 								"value": "{{keycloak_client_secret}}"
 							}
 						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"email\": \"{{test_email}}\",\n    \"first_name\": \"Test\",\n    \"last_name\": \"User\",\n    \"enabled\": true,\n    \"email_verified\": false,\n    \"attributes\": {\n        \"department\": \"engineering\",\n        \"role\": \"developer\"\n    },\n    \"credentials\": [\n        {\n            \"type\": \"password\",\n            \"value\": \"TestPassword123!\",\n            \"temporary\": false\n        }\n    ]\n}"
-						},
+					"body": {
+						"mode": "raw",
+						"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"email\": \"{{test_email}}\",\n    \"first_name\": \"Test\",\n    \"last_name\": \"User\",\n    \"enabled\": true,\n    \"email_verified\": false,\n    \"type\": \"customer\",\n    \"attributes\": {\n        \"department\": \"engineering\",\n        \"role\": \"developer\"\n    },\n    \"credentials\": [\n        {\n            \"type\": \"password\",\n            \"value\": \"TestPassword123!\",\n            \"temporary\": false\n        }\n    ]\n}"
+					},
 						"url": {
 							"raw": "{{base_url}}/api/v1/users",
 							"host": ["{{base_url}}"],
@@ -582,6 +619,30 @@
 							"raw": "{{base_url}}/api/v1/users/{{created_user_id}}",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "users", "{{created_user_id}}"]
+						}
+					},
+					"response": []
+				}
+				,
+				{
+					"name": "Update My Profile",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{access_token}}" },
+							{ "key": "X-Realm-Name", "value": "{{keycloak_realm}}" },
+							{ "key": "X-Client-Id", "value": "{{keycloak_client_id}}" },
+							{ "key": "X-Client-Secret", "value": "{{keycloak_client_secret}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"first_name\": \"Updated\",\n    \"last_name\": \"Profile\",\n    \"email\": \"updated.profile@example.com\",\n    \"attributes\": {\n        \"locale\": \"en-US\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "me"]
 						}
 					},
 					"response": []

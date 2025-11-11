@@ -30,6 +30,9 @@ service KeycloakService {
 
   // Health Check
   rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);
+
+  // Public Keys (JWKS)
+  rpc GetRealmPublicKeys(GetRealmPublicKeysRequest) returns (GetRealmPublicKeysResponse);
 }
 
 // User Management Messages
@@ -61,6 +64,8 @@ message CreateUserRequest {
   map<string, string> attributes = 11;
   repeated string groups = 12;
   repeated string roles = 13;
+  // Optional top-level type for the user (will be mirrored into attributes["type"]).
+  string type = 14;
 }
 
 message CreateUserResponse {
@@ -215,6 +220,28 @@ message VerifyTokenResponse {
   string error_description = 13;
 }
 
+// JWKS/Public Key Messages
+message GetRealmPublicKeysRequest {
+  string realm_name = 1;
+}
+
+message GetRealmPublicKeysResponse {
+  JWKS jwks = 1;
+}
+
+message JWKS {
+  repeated JWK keys = 1;
+}
+
+message JWK {
+  string kty = 1;
+  string use = 2;
+  string kid = 3;
+  string n = 4;
+  string e = 5;
+  string alg = 6;
+}
+
 // Registration Messages
 message RegisterRequest {
   string realm_name = 1;
@@ -227,6 +254,8 @@ message RegisterRequest {
   string password = 8;
   bool email_verified = 9;
   map<string, string> attributes = 10;
+  // Optional top-level type (will be mirrored into attributes["type"]).
+  string type = 11;
 }
 
 message RegisterResponse {
@@ -238,6 +267,8 @@ message RegisterResponse {
   bool enabled = 6;
   bool email_verified = 7;
   google.protobuf.Timestamp created_timestamp = 8;
+  map<string, string> attributes = 9;
+  string type = 10;
 }
 
 // Password Reset Messages

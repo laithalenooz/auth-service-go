@@ -129,6 +129,14 @@ func (s *GRPCServer) CreateUser(ctx context.Context, req *keycloakv1.CreateUserR
 		RealmRoles:    req.Roles,
 	}
 
+	// Mirror top-level req.type into attributes["type"] if provided
+	if req.Type != "" {
+		if kcUser.Attributes == nil {
+			kcUser.Attributes = make(map[string]interface{})
+		}
+		kcUser.Attributes["type"] = req.Type
+	}
+
 	// Create user in Keycloak
 	createdUser, err := s.keycloakClient.CreateUser(ctx, req.RealmName, req.ClientId, req.ClientSecret, kcUser)
 	if err != nil {
@@ -639,6 +647,14 @@ func (s *GRPCServer) Register(ctx context.Context, req *keycloakv1.RegisterReque
 		}
 	}
 
+	// Mirror top-level req.type into attributes["type"] if provided
+	if req.Type != "" {
+		if attributes == nil {
+			attributes = make(map[string]interface{})
+		}
+		attributes["type"] = req.Type
+	}
+
 	// Register user via Keycloak client
 	user, err := s.keycloakClient.Register(ctx, req.RealmName, req.ClientId, req.ClientSecret, req.Username, req.Email, req.FirstName, req.LastName, req.Password, req.EmailVerified, attributes)
 	if err != nil {
@@ -649,16 +665,40 @@ func (s *GRPCServer) Register(ctx context.Context, req *keycloakv1.RegisterReque
 
 	span.SetStatus(otelcodes.Ok, "user registered successfully")
 
-	return &keycloakv1.RegisterResponse{
-		UserId:           user.ID,
-		Username:         user.Username,
-		Email:            user.Email,
-		FirstName:        user.FirstName,
-		LastName:         user.LastName,
-		Enabled:          user.Enabled,
-		EmailVerified:    user.EmailVerified,
-		CreatedTimestamp: timestamppb.New(time.Unix(user.CreatedTimestamp/1000, 0)),
-	}, nil
+    // Convert attributes to map[string]string and extract type
+    attrs := make(map[string]string)
+    var userType string
+    for k, v := range user.Attributes {
+        switch val := v.(type) {
+        case string:
+            attrs[k] = val
+        case []string:
+            // Join multiple values if present
+            if len(val) > 0 {
+                attrs[k] = val[0]
+            } else {
+                attrs[k] = ""
+            }
+        default:
+            attrs[k] = fmt.Sprintf("%v", v)
+        }
+    }
+    if t, ok := attrs["type"]; ok {
+        userType = t
+    }
+
+    return &keycloakv1.RegisterResponse{
+        UserId:           user.ID,
+        Username:         user.Username,
+        Email:            user.Email,
+        FirstName:        user.FirstName,
+        LastName:         user.LastName,
+        Enabled:          user.Enabled,
+        EmailVerified:    user.EmailVerified,
+        CreatedTimestamp: timestamppb.New(time.Unix(user.CreatedTimestamp/1000, 0)),
+        Attributes:       attrs,
+        Type:             userType,
+    }, nil
 }
 
 // ResetPassword initiates a password reset for a user
@@ -748,6 +788,46 @@ func (s *GRPCServer) HealthCheck(ctx context.Context, req *emptypb.Empty) (*keyc
 		Timestamp:    timestamppb.Now(),
 		Dependencies: dependencies,
 	}, nil
+}
+
+// GetRealmPublicKeys returns the JWKS for a realm
+func (s *GRPCServer) GetRealmPublicKeys(ctx context.Context, req *keycloakv1.GetRealmPublicKeysRequest) (*keycloakv1.GetRealmPublicKeysResponse, error) {
+    ctx, span := s.tracer.Start(ctx, "grpc.GetRealmPublicKeys",
+        trace.WithAttributes(
+            attribute.String("grpc.method", "GetRealmPublicKeys"),
+            attribute.String("keycloak.realm", req.RealmName),
+        ),
+    )
+    defer span.End()
+
+    if req.RealmName == "" {
+        span.SetStatus(otelcodes.Error, "realm_name is required")
+        return nil, status.Error(codes.InvalidArgument, "realm_name is required")
+    }
+
+    jwks, err := s.keycloakClient.FetchJWKS(ctx, req.RealmName)
+    if err != nil {
+        span.RecordError(err)
+        span.SetStatus(otelcodes.Error, "failed to fetch JWKS")
+        return nil, status.Errorf(codes.Internal, "failed to fetch JWKS: %v", err)
+    }
+
+    // Convert to protobuf
+    pb := &keycloakv1.JWKS{Keys: make([]*keycloakv1.JWK, 0, len(jwks.Keys))}
+    for _, k := range jwks.Keys {
+        pb.Keys = append(pb.Keys, &keycloakv1.JWK{
+            Kty: k.Kty,
+            Use: k.Use,
+            Kid: k.Kid,
+            N:   k.N,
+            E:   k.E,
+            Alg: k.Alg,
+        })
+    }
+
+    span.SetAttributes(attribute.Int("jwks.keys_count", len(pb.Keys)))
+    span.SetStatus(otelcodes.Ok, "JWKS returned")
+    return &keycloakv1.GetRealmPublicKeysResponse{Jwks: pb}, nil
 }
 
 // ImpersonateUser performs user impersonation using OAuth2 token exchange

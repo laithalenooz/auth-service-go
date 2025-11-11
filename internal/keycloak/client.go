@@ -46,27 +46,58 @@ type AdminToken struct {
 
 // User represents a Keycloak user
 type User struct {
-	ID                string                 `json:"id,omitempty"`
-	Username          string                 `json:"username"`
-	Email             string                 `json:"email,omitempty"`
-	FirstName         string                 `json:"firstName,omitempty"`
-	LastName          string                 `json:"lastName,omitempty"`
-	Enabled           bool                   `json:"enabled"`
-	EmailVerified     bool                   `json:"emailVerified"`
-	CreatedTimestamp  int64                  `json:"createdTimestamp,omitempty"`
-	Attributes        map[string]interface{} `json:"attributes,omitempty"`
-	RequiredActions   []string               `json:"requiredActions,omitempty"`
-	Groups            []string               `json:"groups,omitempty"`
-	RealmRoles        []string               `json:"realmRoles,omitempty"`
-	ClientRoles       map[string]interface{} `json:"clientRoles,omitempty"`
-	Credentials       []Credential           `json:"credentials,omitempty"`
+    ID                string                 `json:"id,omitempty"`
+    Username          string                 `json:"username"`
+    Email             string                 `json:"email,omitempty"`
+    FirstName         string                 `json:"firstName,omitempty"`
+    LastName          string                 `json:"lastName,omitempty"`
+    Enabled           bool                   `json:"enabled"`
+    EmailVerified     bool                   `json:"emailVerified"`
+    CreatedTimestamp  int64                  `json:"createdTimestamp,omitempty"`
+    Attributes        map[string]interface{} `json:"attributes,omitempty"`
+    RequiredActions   []string               `json:"requiredActions,omitempty"`
+    Groups            []string               `json:"groups,omitempty"`
+    RealmRoles        []string               `json:"realmRoles,omitempty"`
+    ClientRoles       map[string]interface{} `json:"clientRoles,omitempty"`
+    Credentials       []Credential           `json:"credentials,omitempty"`
+}
+
+// kcUserPayload mirrors User but uses Keycloak-compatible attributes format (array of strings)
+type kcUserPayload struct {
+    Username      string              `json:"username"`
+    Email         string              `json:"email,omitempty"`
+    FirstName     string              `json:"firstName,omitempty"`
+    LastName      string              `json:"lastName,omitempty"`
+    Enabled       bool                `json:"enabled"`
+    EmailVerified bool                `json:"emailVerified"`
+    Attributes    map[string][]string `json:"attributes,omitempty"`
+    RequiredActions []string          `json:"requiredActions,omitempty"`
+    Groups        []string            `json:"groups,omitempty"`
+    RealmRoles    []string            `json:"realmRoles,omitempty"`
+    ClientRoles   map[string]interface{} `json:"clientRoles,omitempty"`
+    Credentials   []Credential        `json:"credentials,omitempty"`
 }
 
 // Credential represents user credentials
 type Credential struct {
-	Type      string `json:"type"`
-	Value     string `json:"value"`
-	Temporary bool   `json:"temporary"`
+    Type      string `json:"type"`
+    Value     string `json:"value"`
+    Temporary bool   `json:"temporary"`
+}
+
+// JWK represents a JSON Web Key
+type JWK struct {
+    Kty string `json:"kty"`
+    Use string `json:"use"`
+    Kid string `json:"kid"`
+    N   string `json:"n"`
+    E   string `json:"e"`
+    Alg string `json:"alg"`
+}
+
+// JWKS represents a JSON Web Key Set
+type JWKS struct {
+    Keys []JWK `json:"keys"`
 }
 
 // AudienceField handles both string and array audience values
@@ -211,6 +242,53 @@ func (c *Client) acquireAdminToken(ctx context.Context, realm, clientID, clientS
 	return nil
 }
 
+// FetchJWKS fetches the JSON Web Key Set for a realm from Keycloak
+func (c *Client) FetchJWKS(ctx context.Context, realm string) (*JWKS, error) {
+    ctx, span := c.tracer.Start(ctx, "keycloak.fetch_jwks",
+        trace.WithAttributes(
+            attribute.String("keycloak.realm", realm),
+        ),
+    )
+    defer span.End()
+
+    jwksURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/certs", c.baseURL, realm)
+    req, err := http.NewRequestWithContext(ctx, http.MethodGet, jwksURL, nil)
+    if err != nil {
+        span.RecordError(err)
+        span.SetStatus(codes.Error, "failed to create JWKS request")
+        c.metrics.RecordKeycloakError("fetch_jwks", "request_creation_error")
+        return nil, fmt.Errorf("failed to create JWKS request: %w", err)
+    }
+
+    resp, err := c.httpClient.Do(req)
+    if err != nil {
+        span.RecordError(err)
+        span.SetStatus(codes.Error, "JWKS request failed")
+        c.metrics.RecordKeycloakError("fetch_jwks", "request_error")
+        return nil, fmt.Errorf("failed to fetch JWKS: %w", err)
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", resp.StatusCode))
+        c.metrics.RecordKeycloakRequest("fetch_jwks", "http_error", 0)
+        return nil, fmt.Errorf("JWKS request failed with status: %d", resp.StatusCode)
+    }
+
+    var jwks JWKS
+    if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
+        span.RecordError(err)
+        span.SetStatus(codes.Error, "failed to decode JWKS")
+        c.metrics.RecordKeycloakError("fetch_jwks", "decode_error")
+        return nil, fmt.Errorf("failed to decode JWKS: %w", err)
+    }
+
+    span.SetAttributes(attribute.Int("jwks.keys_count", len(jwks.Keys)))
+    span.SetStatus(codes.Ok, "JWKS fetched successfully")
+    c.metrics.RecordKeycloakRequest("fetch_jwks", "ok", 0)
+    return &jwks, nil
+}
+
 // CreateUser creates a new user in Keycloak
 func (c *Client) CreateUser(ctx context.Context, realm, clientID, clientSecret string, user *User) (*User, error) {
 	start := time.Now()
@@ -232,7 +310,45 @@ func (c *Client) CreateUser(ctx context.Context, realm, clientID, clientSecret s
 
 	userURL := fmt.Sprintf("%s/admin/realms/%s/users", c.baseURL, realm)
 
-	userJSON, err := json.Marshal(user)
+    // Normalize attributes to array-of-strings (Keycloak expected format)
+    var normalizedAttrs map[string][]string
+    if user.Attributes != nil {
+        normalizedAttrs = make(map[string][]string)
+        for k, v := range user.Attributes {
+            switch val := v.(type) {
+            case string:
+                normalizedAttrs[k] = []string{val}
+            case []string:
+                normalizedAttrs[k] = val
+            case []interface{}:
+                // Convert []interface{} to []string
+                arr := make([]string, 0, len(val))
+                for _, it := range val {
+                    arr = append(arr, fmt.Sprintf("%v", it))
+                }
+                normalizedAttrs[k] = arr
+            default:
+                normalizedAttrs[k] = []string{fmt.Sprintf("%v", v)}
+            }
+        }
+    }
+
+    payload := kcUserPayload{
+        Username:       user.Username,
+        Email:          user.Email,
+        FirstName:      user.FirstName,
+        LastName:       user.LastName,
+        Enabled:        user.Enabled,
+        EmailVerified:  user.EmailVerified,
+        Attributes:     normalizedAttrs,
+        RequiredActions: user.RequiredActions,
+        Groups:         user.Groups,
+        RealmRoles:     user.RealmRoles,
+        ClientRoles:    user.ClientRoles,
+        Credentials:    user.Credentials,
+    }
+
+    userJSON, err := json.Marshal(payload)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to marshal user")
